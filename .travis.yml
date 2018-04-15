@@ -1,0 +1,18 @@
+language: scala
+
+scala:
+  - 2.12.5
+
+jdk:
+  - oraclejdk8
+
+script: gradle test publish -Pversion="1.0.${TRAVIS_BUILD_NUMBER}" --refresh-dependencies
+
+env:
+  global:
+    secure: K8J32/VUN4xi3GZLd57a4y6Kjyr/mw2DRDZWpVA2RFugTS7hlYX6HfjcEIBwtxs0Y+XD7MQGq/JH6/HHldPOaU9hJjEjlCpZ8KJdFpVA33sc31wie3+rIPVkewnSRcq/6CW67A4KGBmUzrbNuq70ocnakJKKGtjWW9d5Hkp1qsBnUQRgpiZyxOhYh9zceSaAM7QmlWoB6NTcbBHB6aFCsF7dXyUNXQjeB6FzpupbQZlJbpbriA0xDVqRUZz69Ht9BhtCf9sdALoo+OrtWHymNO7/BtZjm5+K+zz5CDXXSo+41SUqh9j4KspfXL/DWcgMcASJGpFIMfNUENrioP4UflrTHNZMwNbRpm3o++JU9DQReCa9Az0muRvh80z/Cp+MQsB+dPRSrOhMLUkTkJy1ZRR3/vyf6WbNstQ0VrPD6F0DlRIse6xRPnhe4p9E5jxsg/bh/+QK74XnWaGW4y9unmhvru2x0Gv5Pa1ej2x7nTgHha3G2trAFHNWlQnQL7Tw6DO3T3d68fp2WBQ44I6o6VD7RBPWu5/B4dbtqqZT1LVrKcqpdY5G45J6EfMKkAKRHEZcDv1l81OWqmK9vhW8JmFdo5N9nE4qXjH/KgAs4SQrFBMEjijy1Kt0BIW+cpShAIaCXghDrsXZj2urL2dEJ8/Ftc6CagJNjdXlUevKeDk=
+
+cache:
+  directories:
+    - "$HOME/.gradle/caches"
+    - "$HOME/.gradle/wrapper"

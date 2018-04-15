@@ -9,7 +9,7 @@ import akka.http.scaladsl.server.{Directive0, Directives, UnsupportedRequestCont
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
 import akka.util.ByteString
 
-import com.sbuslab.common.JsonFormatter
+import com.sbuslab.utils.JsonFormatter
 
 
 trait JsonMarshallers extends Directives {

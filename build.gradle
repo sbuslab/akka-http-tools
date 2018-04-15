@@ -1,14 +1,35 @@
 group 'com.sbuslab'
 
 apply plugin: 'scala'
+apply plugin: 'ivy-publish'
+
+publishing {
+    publications {
+        ivyJava(IvyPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        ivy {
+            credentials {
+                username 'ivy'
+                password System.env.IVY_PASSWORD
+            }
+            url 'http://uploads-repo.sbuslab.com/ivy'
+        }
+    }
+}
 
 repositories {
     mavenCentral()
     jcenter()
+    ivy {
+        url 'http://repo.sbuslab.com/ivy'
+    }
 }
 
 dependencies {
-    compile 'com.sbuslab:common:1.0.+'
+    compile 'com.sbuslab:utils:1.0.+'
 
     compile 'ch.megard:akka-http-cors_2.12:0.3.0'
 

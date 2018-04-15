@@ -8,7 +8,7 @@ import akka.http.scaladsl.server._
 import com.fasterxml.jackson.core.JsonProcessingException
 
 import com.sbuslab.model._
-import com.sbuslab.common.{JsonFormatter, Logging}
+import com.sbuslab.utils.{JsonFormatter, Logging}
 
 
 trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging {

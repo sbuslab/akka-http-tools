@@ -17,7 +17,7 @@ import akka.stream.{ActorMaterializer, OverflowStrategy}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonRawValue}
 
-import com.sbuslab.common.{JsonFormatter, Logging}
+import com.sbuslab.utils.{JsonFormatter, Logging}
 import com.sbuslab.http.directives.HandleErrorsDirectives
 import com.sbuslab.model.{BadRequestError, ErrorMessage}
 

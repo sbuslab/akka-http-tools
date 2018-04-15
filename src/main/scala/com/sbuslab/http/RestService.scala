@@ -22,7 +22,7 @@ import io.prometheus.client.exporter.common.TextFormat
 import io.prometheus.client.hotspot.DefaultExports
 import org.slf4j.MDC
 
-import com.sbuslab.common.Logging
+import com.sbuslab.utils.Logging
 import com.sbuslab.http.directives._
 
 

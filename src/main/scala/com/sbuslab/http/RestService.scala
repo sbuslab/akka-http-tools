@@ -1,7 +1,7 @@
 package com.sbuslab.http
 
 import java.io.StringWriter
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -92,6 +92,14 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       case e: Throwable ⇒
         log.error(s"Error on initialize http server!", e)
         sys.exit(1)
+    }
+
+    scala.sys.addShutdownHook {
+      log.info("Terminating...")
+      system.terminate()
+
+      Await.result(system.whenTerminated, 30.seconds)
+      log.info("Terminated... Bye")
     }
   }
 

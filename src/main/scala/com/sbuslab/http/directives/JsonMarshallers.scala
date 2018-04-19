@@ -2,7 +2,6 @@ package com.sbuslab.http.directives
 
 import scala.reflect.ClassTag
 
-import akka.http.javadsl.marshallers.jackson.Jackson
 import akka.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.{Directive0, Directives, UnsupportedRequestContentTypeRejection}
@@ -21,11 +20,13 @@ trait JsonMarshallers extends Directives {
         case (data, charset)       ⇒ data.decodeString(charset.nioCharset.name)
       }
 
-  implicit def unmarshaller[A](implicit ct: ClassTag[A]): FromEntityUnmarshaller[A] =
+  implicit protected def unmarshaller[A](implicit ct: ClassTag[A]): FromEntityUnmarshaller[A] =
     jsonStringUnmarshaller.map(data ⇒ JsonFormatter.mapper.readValue(data, ct.runtimeClass).asInstanceOf[A])
 
-  implicit def marshaller[Any]: ToEntityMarshaller[Any] =
-    Jackson.marshaller[Any](JsonFormatter.mapper)
+  implicit protected val JsonMarshaller: ToEntityMarshaller[Any] =
+    Marshaller.opaque[Any, MessageEntity] { m ⇒
+      HttpEntity.Strict(ContentTypes.`application/json`, ByteString(JsonFormatter.mapper.writeValueAsBytes(m)))
+    }
 
   implicit protected val UnitMarshaller: ToEntityMarshaller[Unit] =
     Marshaller.opaque[Unit, MessageEntity](_ ⇒ HttpEntity.Empty)
@@ -33,6 +34,10 @@ trait JsonMarshallers extends Directives {
   implicit protected val VoidMarshaller: ToEntityMarshaller[Void] =
     Marshaller.opaque[Void, MessageEntity](_ ⇒ HttpEntity.Empty)
 
+
+  /**
+   * Filter by Content-Type header
+   */
   def contentType[T](contentType: String): Directive0 =
     extract(_.request.entity) flatMap {
       case e if e.contentType.value equalsIgnoreCase contentType ⇒ pass

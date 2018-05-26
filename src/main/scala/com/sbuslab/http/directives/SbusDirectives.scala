@@ -3,7 +3,7 @@ package com.sbuslab.http.directives
 import akka.http.scaladsl.server.{Directive1, Directives}
 
 import com.sbuslab.http.Headers
-import com.sbuslab.model.Context
+import com.sbuslab.sbus.Context
 
 
 trait SbusDirectives extends Directives {

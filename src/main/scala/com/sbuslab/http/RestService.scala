@@ -77,9 +77,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             ))
           }
         } ~
-        logRequestResult(LoggingMagnet(log ⇒ accessLogger(log, System.currentTimeMillis)(_))) {
-          initRoutes
-        }
+        initRoutes
       }, conf.getString("interface"), conf.getInt("port")) onComplete {
         case Success(_) ⇒
           log.info(s"Server is listening on ${conf.getString("interface")}:${conf.getInt("port")}")
@@ -107,18 +105,20 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     cors() {
       withJsonMediaTypeIfNotExists {
         mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-          handleErrors(DefaultErrorFormatter) {
-            pathSuffix(Slash.?) {
-              pathEndOrSingleSlash {
-                get {
-                  handleWebSocketMessages {
-                    handleWebsocketRequest {
-                      startWithDirectives(initRoutes)
+          logRequestResult(LoggingMagnet(log ⇒ accessLogger(log, System.currentTimeMillis)(_))) {
+            handleErrors(DefaultErrorFormatter) {
+              pathSuffix(Slash.?) {
+                pathEndOrSingleSlash {
+                  get {
+                    handleWebSocketMessages {
+                      handleWebsocketRequest {
+                        startWithDirectives(initRoutes)
+                      }
                     }
                   }
-                }
-              } ~
-              initRoutes
+                } ~
+                initRoutes
+              }
             }
           }
         }

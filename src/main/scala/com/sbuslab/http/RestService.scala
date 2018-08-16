@@ -28,6 +28,7 @@ import com.sbuslab.utils.Logging
 
 trait AllCustomDirectives
   extends Directives
+    with RateLimitDirectives
     with WebsocketHandlerDirective
     with HandleErrorsDirectives
     with MetricsDirectives

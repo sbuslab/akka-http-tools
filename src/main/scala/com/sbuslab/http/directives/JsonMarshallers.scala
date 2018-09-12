@@ -2,7 +2,7 @@ package com.sbuslab.http.directives
 
 import scala.reflect.ClassTag
 
-import akka.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller}
+import akka.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller, ToResponseMarshaller}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.{Directive0, Directives, UnsupportedRequestContentTypeRejection}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
@@ -26,6 +26,11 @@ trait JsonMarshallers extends Directives {
   implicit protected val JsonMarshaller: ToEntityMarshaller[Any] =
     Marshaller.opaque[Any, MessageEntity] { m ⇒
       HttpEntity.Strict(ContentTypes.`application/json`, ByteString(JsonFormatter.mapper.writeValueAsBytes(m)))
+    }
+
+  implicit protected val StatusCodeMarshaller: ToResponseMarshaller[StatusCode] =
+    Marshaller.opaque[StatusCode, HttpResponse] { status ⇒
+      HttpResponse(status = status, entity = if (status.allowsEntity()) HttpEntity(ContentTypes.`application/json`, "{}") else HttpEntity.Empty)
     }
 
   implicit protected val UnitMarshaller: ToEntityMarshaller[Unit] =

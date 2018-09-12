@@ -1,14 +1,15 @@
 package com.sbuslab.http.directives
 
-import javax.validation.Validation
 import scala.collection.JavaConverters._
 
 import akka.http.scaladsl.server.{Directive0, Directives}
+import javax.validation.Validation
 
 import com.sbuslab.model.BadRequestError
+import com.sbuslab.utils.Logging
 
 
-trait ValidationDirectives extends Directives {
+trait ValidationDirectives extends Directives with Logging {
 
   private val validator = Validation.buildDefaultValidatorFactory.getValidator
 
@@ -16,9 +17,13 @@ trait ValidationDirectives extends Directives {
     val errors = validator.validate(entity)
 
     if (errors.size() != 0) {
-      failWith(new BadRequestError(errors.asScala.map(e ⇒
+      val msg = errors.asScala.map(e ⇒
         s"${e.getPropertyPath} in ${e.getRootBeanClass.getSimpleName} ${e.getMessage}"
-      ).mkString("; \n"), null, "validation-error"))
+      ).mkString("; \n")
+
+      log.warn(s"BadRequestError: $msg for ${entity.toString.take(1024)}")
+
+      failWith(new BadRequestError(msg, null, "validation-error"))
     } else pass
   }
 }

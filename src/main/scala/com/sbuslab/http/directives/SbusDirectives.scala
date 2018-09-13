@@ -1,5 +1,7 @@
 package com.sbuslab.http.directives
 
+import scala.concurrent.{ExecutionContext, Future}
+
 import akka.http.scaladsl.server.{Directive1, Directives}
 
 import com.sbuslab.http.Headers
@@ -14,4 +16,7 @@ trait SbusDirectives extends Directives {
       case _            ⇒ provide(Context.empty)
     }
   }
+
+  def wrap[T](name: String)(f: Future[T])(implicit ec: ExecutionContext) =
+    f.map(result ⇒ Map(name → result))
 }

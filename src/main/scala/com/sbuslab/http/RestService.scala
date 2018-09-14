@@ -55,30 +55,32 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       DefaultExports.initialize()
 
       Http().bindAndHandle(startWithDirectives {
-        pathEndOrSingleSlash {
-          method(CustomMethods.PING) {
-            complete(Map("value" → "pong"))
-          }
-        } ~
-        path("metrics") {
-          get {
-            completeWith(Marshaller.StringMarshaller) { complete ⇒
-              val writer = new StringWriter()
-              TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-              complete(writer.toString)
+        globalPathPrefix {
+          pathEndOrSingleSlash {
+            method(CustomMethods.PING) {
+              complete(Map("value" → "pong"))
             }
-          }
-        } ~
-        path("version") {
-          get {
-            complete(Map(
-              "service" → System.getenv("SERVICE_NAME"),
-              "version" → System.getenv("SERVICE_VERSION"),
-              "deployed" → System.getenv("SERVICE_DEPLOY_TIME"),
-            ))
-          }
-        } ~
-        initRoutes
+          } ~
+          path("metrics") {
+            get {
+              completeWith(Marshaller.StringMarshaller) { complete ⇒
+                val writer = new StringWriter()
+                TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                complete(writer.toString)
+              }
+            }
+          } ~
+          path("version") {
+            get {
+              complete(Map(
+                "service" → System.getenv("SERVICE_NAME"),
+                "version" → System.getenv("SERVICE_VERSION"),
+                "deployed" → System.getenv("SERVICE_DEPLOY_TIME"),
+              ))
+            }
+          } ~
+          initRoutes
+        }
       }, conf.getString("interface"), conf.getInt("port")) onComplete {
         case Success(_) ⇒
           log.info(s"Server is listening on ${conf.getString("interface")}:${conf.getInt("port")}")
@@ -109,18 +111,16 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           logRequestResult(LoggingMagnet(log ⇒ accessLogger(log, System.currentTimeMillis)(_))) {
             handleErrors(DefaultErrorFormatter) {
               pathSuffix(Slash.?) {
-                globalPathPrefix {
-                  pathEndOrSingleSlash {
-                    get {
-                      handleWebSocketMessages {
-                        handleWebsocketRequest {
-                          startWithDirectives(initRoutes)
-                        }
+                pathEndOrSingleSlash {
+                  get {
+                    handleWebSocketMessages {
+                      handleWebsocketRequest {
+                        startWithDirectives(initRoutes)
                       }
                     }
-                  } ~
-                  initRoutes
-                }
+                  }
+                } ~
+                initRoutes
               }
             }
           }

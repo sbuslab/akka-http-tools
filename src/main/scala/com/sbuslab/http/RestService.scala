@@ -6,8 +6,8 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import akka.actor.ActorSystem
-import akka.event.LoggingAdapter
 import akka.event.Logging.{InfoLevel, WarningLevel}
+import akka.event.LoggingAdapter
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshaller
 import akka.http.scaladsl.model.{ContentTypes, HttpRequest, MediaTypes}
@@ -109,21 +109,30 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           logRequestResult(LoggingMagnet(log ⇒ accessLogger(log, System.currentTimeMillis)(_))) {
             handleErrors(DefaultErrorFormatter) {
               pathSuffix(Slash.?) {
-                pathEndOrSingleSlash {
-                  get {
-                    handleWebSocketMessages {
-                      handleWebsocketRequest {
-                        startWithDirectives(initRoutes)
+                globalPathPrefix {
+                  pathEndOrSingleSlash {
+                    get {
+                      handleWebSocketMessages {
+                        handleWebsocketRequest {
+                          startWithDirectives(initRoutes)
+                        }
                       }
                     }
-                  }
-                } ~
-                initRoutes
+                  } ~
+                  initRoutes
+                }
               }
             }
           }
         }
       }
+    }
+
+  private val globalPathPrefix =
+    if (conf.hasPath("path-prefix")) {
+      pathPrefix(conf.getString("path-prefix"))
+    } else {
+      pass
     }
 
   private def accessLogger(log: LoggingAdapter, start: Long)(req: HttpRequest)(res: Any): Unit = {

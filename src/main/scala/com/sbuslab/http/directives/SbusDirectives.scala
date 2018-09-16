@@ -17,6 +17,8 @@ trait SbusDirectives extends Directives {
     }
   }
 
-  def wrap[T](name: String)(f: Future[T])(implicit ec: ExecutionContext) =
-    f.map(result ⇒ Map(name → result))
+  @scala.annotation.tailrec
+  final def wrap(field: String*)(f: Future[_])(implicit ec: ExecutionContext): Future[_] =
+    if (field.nonEmpty) wrap(field.init: _*)(f.map(res ⇒ Map(field.last → res)))
+    else f
 }

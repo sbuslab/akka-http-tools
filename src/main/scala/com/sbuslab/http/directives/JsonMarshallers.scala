@@ -4,10 +4,11 @@ import scala.reflect.ClassTag
 
 import akka.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller, ToResponseMarshaller}
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.{Directive0, Directives, UnsupportedRequestContentTypeRejection}
-import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
+import akka.http.scaladsl.server._
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, FromRequestUnmarshaller, Unmarshaller}
 import akka.util.ByteString
 
+import com.sbuslab.model.BadRequestError
 import com.sbuslab.utils.JsonFormatter
 
 
@@ -47,5 +48,10 @@ trait JsonMarshallers extends Directives {
     extract(_.request.entity) flatMap {
       case e if e.contentType.value equalsIgnoreCase contentType ⇒ pass
       case _ ⇒ reject(UnsupportedRequestContentTypeRejection(Set(MediaType.custom(contentType, binary = false))))
+    }
+
+  override def entity[T](um: FromRequestUnmarshaller[T]): Directive1[T] =
+    mapRejections(rs ⇒ if (rs.nonEmpty) throw new BadRequestError(rs.mkString("; ")) else rs).tflatMap { _ ⇒
+      super.entity(um)
     }
 }

@@ -1,7 +1,5 @@
 package com.sbuslab.http.directives
 
-import java.util
-
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
@@ -24,22 +22,13 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
 
   def DefaultErrorFormatter: ErrorFormatter = {
     case e: ErrorMessage ⇒
-      val msg = Map.newBuilder[String, Any]
-      msg += ("error" → dasherize(Option(e.error).getOrElse(StatusCode.int2StatusCode(e.code).reason)))
-      msg += ("message" → e.getMessage)
-      msg += ("cause" → formatCause(e.getCause))
-
-      val links = if (e._links != null) e._links else new util.HashMap[String, Any]()
-
-      if (e.error != null) {
-        links.put(dasherize(e.error), Map("href" → "/docs/rels/{rel}"))
-      }
-
-      if (!links.isEmpty) {
-        msg += ("_links" → links)
-      }
-
-      serialize(msg.result())
+      serialize(Map(
+        "error"     → dasherize(Option(e.error).getOrElse(StatusCode.int2StatusCode(e.code).reason)),
+        "message"   → e.getMessage,
+        "cause"     → formatCause(e.getCause),
+        "_links"    → e._links,
+        "_embedded" → e._embedded
+      ))
 
     case e: Throwable ⇒
       serialize(Map(

@@ -138,7 +138,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     val requestBody =
       if (LogBody) {
         "\n" + request.headers.mkString("\n") +
-        "\n\n" + Await.result(request.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim
+        "\n" + Await.result(request.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)
       } else ""
 
     request.getHeader(Headers.CorrelationId) ifPresent { corrId ⇒
@@ -155,7 +155,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             case mt ⇒ s"$mt "
           }}""" +
           s"<--- ${response.status} ${System.currentTimeMillis - start} ms" +
-          (if (LogBody) s"$requestBody \n\n\n${Await.result(response.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim}" else "")
+          (if (LogBody) s"$requestBody \n\n${Await.result(response.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)}" else "")
 
         if (response.status.isSuccess || response.status.intValue == 404) {
           log.info(msg)

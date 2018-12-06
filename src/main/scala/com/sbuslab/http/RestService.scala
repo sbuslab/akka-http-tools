@@ -6,14 +6,13 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import akka.actor.ActorSystem
-import akka.event.Logging.{InfoLevel, WarningLevel}
-import akka.event.LoggingAdapter
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshaller
 import akka.http.scaladsl.model.{ContentTypes, HttpRequest, MediaTypes}
 import akka.http.scaladsl.server._
-import akka.http.scaladsl.server.directives.{LogEntry, LoggingMagnet}
+import akka.http.scaladsl.server.directives.LoggingMagnet
 import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives
 import com.typesafe.config.Config
@@ -42,13 +41,15 @@ trait AllCustomDirectives
 
 
 trait RestRoutes extends AllCustomDirectives {
-  implicit val defaultTimeout = Timeout(10 seconds)
+  implicit val defaultTimeout = Timeout(10.seconds)
 }
 
 
 class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionContext, mat: ActorMaterializer) extends AllCustomDirectives {
 
-  implicit val timeout = Timeout(10 seconds)
+  implicit val timeout = Timeout(10.seconds)
+
+  private val LogBody = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
 
   def start(initRoutes: ⇒ Route) {
     try {
@@ -106,7 +107,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     cors() {
       withJsonMediaTypeIfNotExists {
         mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-          logRequestResult(LoggingMagnet(log ⇒ accessLogger(log, System.currentTimeMillis)(_))) {
+          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
             handleErrors(DefaultErrorFormatter) {
               pathSuffix(Slash.?) {
                 globalPathPrefix {
@@ -133,32 +134,38 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       pass
     }
 
-  private def accessLogger(log: LoggingAdapter, start: Long)(req: HttpRequest)(res: Any): Unit = {
-    val entry = res match {
-      case RouteResult.Complete(resp) ⇒
-        LogEntry(
-          s"${req.method.value} ${req.uri.toRelative} "
-            + s"""${req.entity.contentType.mediaType match {
-              case MediaTypes.`application/json` ⇒ ""
-              case mt if mt.mainType == "none" ⇒ ""
-              case mt ⇒ s"$mt "
-            }}"""
-            + s"<--- ${resp.status} ${System.currentTimeMillis - start} ms",
-          if (resp.status.isSuccess || resp.status.intValue == 404) InfoLevel else WarningLevel
-        )
+  private def accessLogger(start: Long)(request: HttpRequest)(result: Any): Unit = {
+    val requestBody =
+      if (LogBody) {
+        "\n" + request.headers.mkString("\n") +
+        "\n\n" + Await.result(request.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim
+      } else ""
 
-      case RouteResult.Rejected(reason) ⇒
-        LogEntry(
-          s"${req.method.value} ${req.uri.toRelative} ${req.entity} <--- rejected: ${reason.mkString(",")} ${System.currentTimeMillis - start} ms",
-          WarningLevel
-        )
-    }
-
-    req.getHeader(Headers.CorrelationId) ifPresent { corrId ⇒
+    request.getHeader(Headers.CorrelationId) ifPresent { corrId ⇒
       MDC.put("correlation_id", corrId.value())
     }
 
-    entry.logTo(log)
+    result match {
+      case RouteResult.Complete(response) ⇒
+        def msg =
+          s"${request.method.value} ${request.uri.toRelative} " +
+          s"""${request.entity.contentType.mediaType match {
+            case MediaTypes.`application/json` ⇒ ""
+            case mt if mt.mainType == "none" ⇒ ""
+            case mt ⇒ s"$mt "
+          }}""" +
+          s"<--- ${response.status} ${System.currentTimeMillis - start} ms" +
+          (if (LogBody) s"$requestBody \n\n\n${Await.result(response.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim}" else "")
+
+        if (response.status.isSuccess || response.status.intValue == 404) {
+          log.info(msg)
+        } else {
+          log.warn(msg)
+        }
+
+      case RouteResult.Rejected(reason) ⇒
+        log.warn(s"${request.method.value} ${request.uri.toRelative} ${request.entity} <--- rejected: ${reason.mkString(",")} ${System.currentTimeMillis - start} ms$requestBody")
+    }
   }
 
   private def withJsonMediaTypeIfNotExists: Directive0 =

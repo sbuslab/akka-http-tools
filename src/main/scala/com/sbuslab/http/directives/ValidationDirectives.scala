@@ -9,9 +9,13 @@ import com.sbuslab.model.BadRequestError
 import com.sbuslab.utils.Logging
 
 
-trait ValidationDirectives extends Directives with Logging {
-
+object ValidationDirectives {
   private val validator = Validation.buildDefaultValidatorFactory.getValidator
+}
+
+
+trait ValidationDirectives extends Directives with Logging {
+  import ValidationDirectives._
 
   def validate[T](entity: T): Directive0 = {
     val errors = validator.validate(entity)

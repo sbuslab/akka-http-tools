@@ -60,7 +60,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
     ExceptionHandler {
       case e: ErrorMessage ⇒
         log.debug(e.getMessage, e)
-        complete(e.code, formatter.applyOrElse(e, DefaultErrorFormatter))
+        complete(StatusCodes.getForKey(e.code).getOrElse(StatusCodes.custom(e.code, e.getMessage)), formatter.applyOrElse(e, DefaultErrorFormatter))
 
       case e: scala.concurrent.TimeoutException ⇒
         log.debug(e.getMessage, e)

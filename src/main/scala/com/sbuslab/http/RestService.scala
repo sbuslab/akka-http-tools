@@ -61,15 +61,6 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             complete(Map("value" → "pong"))
           }
         } ~
-        path("metrics") {
-          get {
-            completeWith(Marshaller.StringMarshaller) { complete ⇒
-              val writer = new StringWriter()
-              TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-              complete(writer.toString)
-            }
-          }
-        } ~
         path("version") {
           get {
             complete(Map(
@@ -110,6 +101,15 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
             handleErrors(DefaultErrorFormatter) {
               pathSuffix(Slash.?) {
+                path("metrics") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      val writer = new StringWriter()
+                      TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                      complete(writer.toString)
+                    }
+                  }
+                } ~
                 globalPathPrefix {
                   pathEnd {
                     handleWebSocketMessages {

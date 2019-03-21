@@ -7,12 +7,20 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, FromRequestUnmarshaller, Unmarshaller}
 import akka.util.ByteString
+import com.fasterxml.jackson.databind.ObjectMapper
 
 import com.sbuslab.model.BadRequestError
 import com.sbuslab.utils.JsonFormatter
+import com.sbuslab.utils.json.FacadeAnnotationIntrospector
 
 
 trait JsonMarshallers extends Directives {
+
+  private lazy val writerMapper: ObjectMapper = {
+    val m = JsonFormatter.createMapper()
+    m.setAnnotationIntrospector(new FacadeAnnotationIntrospector)
+    m
+  }
 
   private val jsonStringUnmarshaller =
     Unmarshaller.byteStringUnmarshaller
@@ -26,7 +34,7 @@ trait JsonMarshallers extends Directives {
 
   implicit protected val JsonMarshaller: ToEntityMarshaller[Any] =
     Marshaller.opaque[Any, MessageEntity] { m ⇒
-      HttpEntity.Strict(ContentTypes.`application/json`, ByteString(JsonFormatter.mapper.writeValueAsBytes(m)))
+      HttpEntity.Strict(ContentTypes.`application/json`, ByteString(writerMapper.writeValueAsBytes(m)))
     }
 
   implicit protected val StatusCodeMarshaller: ToResponseMarshaller[StatusCode] =

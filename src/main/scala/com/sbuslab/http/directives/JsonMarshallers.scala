@@ -14,13 +14,16 @@ import com.sbuslab.utils.JsonFormatter
 import com.sbuslab.utils.json.FacadeAnnotationIntrospector
 
 
+object JsonMarshallers {
+  private lazy val writerMapper: ObjectMapper =
+    JsonFormatter.mapper.copy()
+      .setAnnotationIntrospector(new FacadeAnnotationIntrospector)
+}
+
+
 trait JsonMarshallers extends Directives {
 
-  private lazy val writerMapper: ObjectMapper = {
-    val m = JsonFormatter.createMapper()
-    m.setAnnotationIntrospector(new FacadeAnnotationIntrospector)
-    m
-  }
+  import JsonMarshallers._
 
   private val jsonStringUnmarshaller =
     Unmarshaller.byteStringUnmarshaller

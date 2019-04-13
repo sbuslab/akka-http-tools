@@ -15,9 +15,10 @@ import com.sbuslab.utils.json.FacadeAnnotationIntrospector
 
 
 object JsonMarshallers {
-  private lazy val writerMapper: ObjectMapper =
-    JsonFormatter.mapper.copy()
-      .setAnnotationIntrospector(new FacadeAnnotationIntrospector)
+  private lazy val writerMapper: ObjectMapper = {
+    val m = JsonFormatter.mapper.copy()
+    m.setConfig(m.getSerializationConfig.withAppendedAnnotationIntrospector(new FacadeAnnotationIntrospector))
+  }
 }
 
 

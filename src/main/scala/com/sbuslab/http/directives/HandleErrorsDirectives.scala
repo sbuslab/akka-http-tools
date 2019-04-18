@@ -25,16 +25,14 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
       serialize(Map(
         "error"     → dasherize(Option(e.error).getOrElse(StatusCode.int2StatusCode(e.code).reason)),
         "message"   → e.getMessage,
-        "cause"     → formatCause(e.getCause),
         "_links"    → e._links,
-        "_embedded" → e._embedded
+        "_embedded" → e._embedded,
       ))
 
     case e: Throwable ⇒
       serialize(Map(
         "error"   → "internal-error",
         "message" → e.getMessage,
-        "cause"   → formatCause(e.getCause)
       ))
 
     case HttpResponse(status, headers, ent: HttpEntity.Strict, _) ⇒
@@ -43,12 +41,6 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
       } else {
         ent.data.utf8String
       }
-  }
-
-  private def formatCause(e: Throwable) = {
-    if (e != null) {
-      s"${e.getClass.getName}: ${e.getMessage}\n${e.getStackTrace.take(5).mkString("\n")}..."
-    } else null
   }
 
   def handleErrors(formatter: ErrorFormatter): Directive0 =

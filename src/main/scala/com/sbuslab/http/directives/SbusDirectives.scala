@@ -11,9 +11,16 @@ import com.sbuslab.sbus.Context
 trait SbusDirectives extends Directives {
 
   def sbusContext: Directive1[Context] = {
-    optionalHeaderValueByName(Headers.CorrelationId).flatMap {
-      case Some(corrId) ⇒ provide(Context.withCorrelationId(corrId))
-      case _            ⇒ provide(Context.empty)
+    (extractClientIP & optionalHeaderValueByName("User-Agent")).tflatMap { case (ip, userAgent) ⇒
+      val sbusCtx = Context(Map(
+        "ip"        → ip.value,
+        "userAgent" → userAgent.orNull
+      ))
+
+      optionalHeaderValueByName(Headers.CorrelationId).flatMap {
+        case Some(corrId) ⇒ provide(sbusCtx.withCorrelationId(corrId))
+        case _            ⇒ provide(sbusCtx)
+      }
     }
   }
 

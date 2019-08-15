@@ -15,10 +15,10 @@ trait AuthProvider[T] {
 
 trait AuthDirectives extends Directives {
 
-  protected def auth[T](f: ⇒ Route)(implicit authProvider: AuthProvider[T], context: Context = Context.empty): Route =
+  protected def auth[T](f: ⇒ Route)(implicit authProvider: AuthProvider[T], context: Context): Route =
     auth { _: T ⇒ f }
 
-  protected def auth[T](inner: T ⇒ Route)(implicit authProvider: AuthProvider[T], context: Context = Context.empty): Route =
+  protected def auth[T](inner: T ⇒ Route)(implicit authProvider: AuthProvider[T], context: Context): Route =
     extractRequest { req ⇒
       onSuccess(authProvider.auth(req))(inner)
     }

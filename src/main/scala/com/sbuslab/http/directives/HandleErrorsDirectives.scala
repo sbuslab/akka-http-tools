@@ -3,6 +3,7 @@ package com.sbuslab.http.directives
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
+import ch.megard.akka.http.cors.scaladsl.CorsRejection
 import com.fasterxml.jackson.core.JsonProcessingException
 
 import com.sbuslab.model._
@@ -46,6 +47,10 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
   def handleErrors(formatter: ErrorFormatter): Directive0 =
     handleExceptions(customExceptionHandler(formatter)) &
     handleRejections(customRejectionHandler) &
+    handleRejections({
+      case Seq(r: CorsRejection) ⇒ Some(complete(StatusCodes.Forbidden, formatter.applyOrElse(new ForbiddenError(r.cause.toString), DefaultErrorFormatter)))
+      case _                     ⇒ None
+    }) &
     respondWithDefaultHeader(RawHeader(ErrorHandlerHeader, "1"))
 
   private def customExceptionHandler(formatter: ErrorFormatter) =

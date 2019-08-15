@@ -15,6 +15,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives
+import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
 import com.typesafe.config.Config
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
@@ -49,7 +50,9 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
 
   implicit val timeout = Timeout(10.seconds)
 
-  private val LogBody = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
+  private val logBody      = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
+  private val corsSettings = CorsSettings(system)
+
 
   def start(initRoutes: ⇒ Route) {
     try {
@@ -95,11 +98,11 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   }
 
   private def startWithDirectives(initRoutes: Route): Route =
-    cors() {
-      withJsonMediaTypeIfNotExists {
-        mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-            handleErrors(DefaultErrorFormatter) {
+    withJsonMediaTypeIfNotExists {
+      mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
+        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+          handleErrors(DefaultErrorFormatter) {
+            cors(corsSettings) {
               pathSuffix(Slash.?) {
                 path("metrics") {
                   get {
@@ -136,7 +139,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
 
   private def accessLogger(start: Long)(request: HttpRequest)(result: Any): Unit = {
     val requestBody =
-      if (LogBody) {
+      if (logBody) {
         "\n" + request.headers.mkString("\n") +
         "\n" + Await.result(request.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)
       } else ""
@@ -155,7 +158,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             case mt ⇒ s"$mt "
           }}""" +
           s"<--- ${response.status} ${System.currentTimeMillis - start} ms" +
-          (if (LogBody) s"$requestBody \n\n${Await.result(response.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)}" else "")
+          (if (logBody) s"$requestBody \n\n${Await.result(response.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)}" else "")
 
         if (response.status.isSuccess || response.status.intValue == 404) {
           log.info(msg)

@@ -98,11 +98,11 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   }
 
   private def startWithDirectives(initRoutes: Route): Route =
-    withJsonMediaTypeIfNotExists {
-      mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-          handleErrors(DefaultErrorFormatter) {
-            cors(corsSettings) {
+    cors(corsSettings) {
+      withJsonMediaTypeIfNotExists {
+        mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
+          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+            handleErrors(DefaultErrorFormatter) {
               pathSuffix(Slash.?) {
                 path("metrics") {
                   get {

@@ -8,12 +8,12 @@ import scala.util.{Failure, Success}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshaller
-import akka.http.scaladsl.model.{ContentTypes, HttpRequest, MediaTypes}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpRequest, MediaTypes}
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.server.directives.LoggingMagnet
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
-import akka.util.Timeout
+import akka.stream.scaladsl.{Sink, Source}
+import akka.util.{ByteString, Timeout}
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives
 import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
 import com.typesafe.config.Config
@@ -137,11 +137,16 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       pass
     }
 
+  private def stringifySource(data: HttpEntity): String =
+    try Await.result(data.toStrict(1.second), 1.second).data.utf8String.trim.take(4096) catch {
+      case e: Throwable ⇒ "Error on stringify body: " + e.getMessage
+    }
+
   private def accessLogger(start: Long)(request: HttpRequest)(result: Any): Unit = {
     val requestBody =
       if (logBody) {
         "\n" + request.headers.mkString("\n") +
-        "\n" + Await.result(request.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)
+        "\n" + stringifySource(request.entity)
       } else ""
 
     request.getHeader(Headers.CorrelationId) ifPresent { corrId ⇒
@@ -158,7 +163,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             case mt ⇒ s"$mt "
           }}""" +
           s"<--- ${response.status} ${System.currentTimeMillis - start} ms" +
-          (if (logBody) s"$requestBody \n\n${Await.result(response.entity.dataBytes.runWith(Sink.head).map(_.utf8String), 1.second).trim.take(4096)}" else "")
+          (if (logBody) s"$requestBody \n\n${stringifySource(response.entity)}" else "")
 
         if (response.status.isSuccess || response.status.intValue == 404) {
           log.info(msg)
@@ -169,6 +174,8 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       case RouteResult.Rejected(reason) ⇒
         log.warn(s"${request.method.value} ${request.uri.toRelative} ${request.entity} <--- rejected: ${reason.mkString(",")} ${System.currentTimeMillis - start} ms$requestBody")
     }
+
+    MDC.remove("correlation_id")
   }
 
   private def withJsonMediaTypeIfNotExists: Directive0 =

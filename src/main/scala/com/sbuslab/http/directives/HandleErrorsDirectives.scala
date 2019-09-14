@@ -1,5 +1,7 @@
 package com.sbuslab.http.directives
 
+import java.sql.SQLException
+
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
@@ -28,6 +30,9 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
         "_links"    → e._links,
         "_embedded" → e._embedded,
       ))
+
+    case e: SQLException ⇒
+      serialize(Map("error" → "internal-error", "message" → "Database error"))
 
     case e: Throwable ⇒
       serialize(Map(

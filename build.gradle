@@ -8,7 +8,7 @@ buildscript {
 }
 
 plugins {
-    id 'io.codearte.nexus-staging' version '0.12.0' apply false
+    id 'io.codearte.nexus-staging' version '0.21.1' apply false
 }
 
 apply plugin: 'scala'
@@ -64,8 +64,8 @@ dependencies {
 
     compile 'ch.megard:akka-http-cors_2.12:0.4.1'
 
-    compile 'com.typesafe.akka:akka-http_2.12:10.1.9'
-    compile 'com.typesafe.akka:akka-http-jackson_2.12:10.1.9'
+    compile 'com.typesafe.akka:akka-http_2.12:10.1.10'
+    compile 'com.typesafe.akka:akka-http-jackson_2.12:10.1.10'
 
-    compile 'com.typesafe.akka:akka-stream_2.12:2.5.25'
+    compile 'com.typesafe.akka:akka-stream_2.12:2.5.26'
 }

@@ -59,7 +59,7 @@ trait JsonMarshallers extends Directives {
   def contentType[T](contentType: String): Directive0 =
     extract(_.request.entity) flatMap {
       case e if e.contentType.value equalsIgnoreCase contentType ⇒ pass
-      case _ ⇒ reject(UnsupportedRequestContentTypeRejection(Set(MediaType.custom(contentType, binary = false))))
+      case _ ⇒ reject(UnsupportedRequestContentTypeRejection(Set(MediaType.custom(contentType, binary = false)), None))
     }
 
   override def entity[T](um: FromRequestUnmarshaller[T]): Directive1[T] =

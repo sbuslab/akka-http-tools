@@ -51,6 +51,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   implicit val timeout = Timeout(10.seconds)
 
   private val logBody      = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
+  private val robotsTxt    = if (conf.hasPath("robots-txt")) conf.getString("robots-txt") else "User-agent: *\nDisallow: /"
   private val corsSettings = CorsSettings(system)
 
 
@@ -99,28 +100,35 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
 
   private def startWithDirectives(initRoutes: Route): Route =
     cors(corsSettings) {
-      withJsonMediaTypeIfNotExists {
-        mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-            handleErrors(DefaultErrorFormatter) {
-              pathSuffix(Slash.?) {
-                path("metrics") {
-                  get {
-                    completeWith(Marshaller.StringMarshaller) { complete ⇒
-                      val writer = new StringWriter()
-                      TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                      complete(writer.toString)
+      mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
+        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+          handleErrors(DefaultErrorFormatter) {
+            pathSuffix(Slash.?) {
+              path("metrics") {
+                get {
+                  completeWith(Marshaller.StringMarshaller) { complete ⇒
+                    val writer = new StringWriter()
+                    TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                    complete(writer.toString)
+                  }
+                }
+              } ~
+              path("robots.txt") {
+                get {
+                  completeWith(Marshaller.StringMarshaller) { complete ⇒
+                    complete(robotsTxt)
+                  }
+                }
+              } ~
+              globalPathPrefix {
+                pathEnd {
+                  handleWebSocketMessages {
+                    handleWebsocketRequest {
+                      startWithDirectives(initRoutes)
                     }
                   }
                 } ~
-                globalPathPrefix {
-                  pathEnd {
-                    handleWebSocketMessages {
-                      handleWebsocketRequest {
-                        startWithDirectives(initRoutes)
-                      }
-                    }
-                  } ~
+                withJsonMediaTypeIfNotExists {
                   initRoutes
                 }
               }

@@ -7,9 +7,10 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, FromRequestUnmarshaller, Unmarshaller}
 import akka.util.ByteString
+import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import com.sbuslab.model.BadRequestError
+import com.sbuslab.model.{BadRequestError, SecureString, SecureStringSerializer}
 import com.sbuslab.utils.JsonFormatter
 import com.sbuslab.utils.json.FacadeAnnotationIntrospector
 
@@ -18,6 +19,10 @@ object JsonMarshallers {
   private lazy val writerMapper: ObjectMapper = {
     val m = JsonFormatter.mapper.copy()
     m.setConfig(m.getSerializationConfig.withAppendedAnnotationIntrospector(new FacadeAnnotationIntrospector))
+
+    val secureStringModule = new SimpleModule("SecureStringModule")
+    secureStringModule.addSerializer(classOf[SecureString], new SecureStringSerializer())
+    m.registerModule(secureStringModule)
   }
 }
 

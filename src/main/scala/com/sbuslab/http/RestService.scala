@@ -1,6 +1,7 @@
 package com.sbuslab.http
 
 import java.io.StringWriter
+import java.util.UUID
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -9,11 +10,11 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshaller
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpRequest, MediaTypes}
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.server.directives.LoggingMagnet
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.{ByteString, Timeout}
+import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives
 import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
 import com.typesafe.config.Config
@@ -100,36 +101,38 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
 
   private def startWithDirectives(initRoutes: Route): Route =
     cors(corsSettings) {
-      mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-          handleErrors(DefaultErrorFormatter) {
-            pathSuffix(Slash.?) {
-              path("metrics") {
-                get {
-                  completeWith(Marshaller.StringMarshaller) { complete ⇒
-                    val writer = new StringWriter()
-                    TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                    complete(writer.toString)
-                  }
-                }
-              } ~
-              path("robots.txt") {
-                get {
-                  completeWith(Marshaller.StringMarshaller) { complete ⇒
-                    complete(robotsTxt)
-                  }
-                }
-              } ~
-              globalPathPrefix {
-                pathEnd {
-                  handleWebSocketMessages {
-                    handleWebsocketRequest {
-                      startWithDirectives(initRoutes)
+      mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
+        mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
+          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+            handleErrors(DefaultErrorFormatter) {
+              pathSuffix(Slash.?) {
+                path("metrics") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      val writer = new StringWriter()
+                      TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                      complete(writer.toString)
                     }
                   }
                 } ~
-                withJsonMediaTypeIfNotExists {
-                  initRoutes
+                path("robots.txt") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      complete(robotsTxt)
+                    }
+                  }
+                } ~
+                globalPathPrefix {
+                  pathEnd {
+                    handleWebSocketMessages {
+                      handleWebsocketRequest {
+                        startWithDirectives(initRoutes)
+                      }
+                    }
+                  } ~
+                  withJsonMediaTypeIfNotExists {
+                    initRoutes
+                  }
                 }
               }
             }

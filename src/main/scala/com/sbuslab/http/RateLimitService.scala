@@ -21,7 +21,6 @@ case object NotExceeded extends CheckLimitResult
 trait RateLimitProvider {
   def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult]
   def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit
-  def reset(action: String, keys: Seq[(String, String)]): Unit
 }
 
 object RateLimitProvider {
@@ -29,7 +28,6 @@ object RateLimitProvider {
     private val notExceeded = Future.successful(NotExceeded)
     def increment(success: Boolean, action: String, keys: Seq[(String, String)]) = {}
     def check(action: String, keys: Seq[(String, String)]) = notExceeded
-    def reset(action: String, keys: Seq[(String, String)]): Unit = {}
   }
 }
 
@@ -81,33 +79,25 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
     log.trace(s"increment($success, $action, $keys)")
 
     filterExcludes(keys) foreach { case (keyName, keyValue) ⇒
-      val resultType = if (success) SuccResult else FailResult
+      if (success && findConfig(action, FailResult, keyName).exists(_.clearOnSuccess)) {
+          log.trace(s"Reset rate limit for: $action, $FailResult, $keyName, $keyValue")
+          storage.delete(makeKey(action, FailResult, keyName, keyValue))
 
-      findConfig(action, resultType, keyName) foreach { cntConfig ⇒
-        val cntKey = makeKey(action, resultType, keyName, keyValue)
+      } else {
+        val resultType = if (success) SuccResult else FailResult
 
-        storage.incr(cntKey, cntConfig.ttlMillis) foreach { cnt ⇒
-          log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
+        findConfig(action, resultType, keyName) foreach { cntConfig ⇒
+          val cntKey = makeKey(action, resultType, keyName, keyValue)
 
-          if (cnt >= cntConfig.max) {
-            log.trace(s"Rate limit exceeded for $action ($success) by $keyName=$keyValue! Max: ${cntConfig.max}")
-            storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
+          storage.incr(cntKey, cntConfig.ttlMillis) foreach { cnt ⇒
+            log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
+
+            if (cnt >= cntConfig.max) {
+              log.trace(s"Rate limit exceeded for $action ($success) by $keyName=$keyValue! Max: ${cntConfig.max}")
+              storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
+            }
           }
         }
-      }
-    }
-  }
-
-  def reset(action: String, keys: Seq[(String, String)]) {
-    filterExcludes(keys) foreach { case (keyName, keyValue) ⇒
-      if (findConfig(action, FailResult, keyName).exists(_.clearOnSuccess)) {
-        log.trace(s"Reset rate limit for: $action, $FailResult, $keyName, $keyValue")
-        storage.delete(makeKey(action, FailResult, keyName, keyValue))
-      }
-
-      if (findConfig(action, SuccResult, keyName).exists(_.clearOnSuccess)) {
-        log.trace(s"Reset rate limit for: $action, $SuccResult, $keyName, $keyValue")
-        storage.delete(makeKey(action, SuccResult, keyName, keyValue))
       }
     }
   }

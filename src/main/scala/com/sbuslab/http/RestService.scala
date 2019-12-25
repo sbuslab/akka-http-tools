@@ -99,41 +99,52 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     }
   }
 
-  private def startWithDirectives(initRoutes: Route): Route =
-    cors(corsSettings) {
-      mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
-        mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-            handleErrors(DefaultErrorFormatter) {
-              pathSuffix(Slash.?) {
-                path("metrics") {
-                  get {
-                    completeWith(Marshaller.StringMarshaller) { complete ⇒
-                      val writer = new StringWriter()
-                      TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                      complete(writer.toString)
-                    }
-                  }
-                } ~
-                path("robots.txt") {
-                  get {
-                    completeWith(Marshaller.StringMarshaller) { complete ⇒
-                      complete(robotsTxt)
-                    }
-                  }
-                } ~
-                globalPathPrefix {
-                  pathEnd {
-                    handleWebSocketMessages {
-                      handleWebsocketRequest {
-                        startWithDirectives(initRoutes)
-                      }
-                    }
-                  } ~
-                  withJsonMediaTypeIfNotExists {
-                    initRoutes
+  private def startWithDirectives(inner: Route): Route =
+    commonRoutesWrap {
+      cors(corsSettings) {
+        handleErrors(DefaultErrorFormatter) {
+          pathEnd {
+            extractRequest { initRequest ⇒
+              handleWebSocketMessages {
+                handleWebsocketRequest(initRequest, {
+                  commonRoutesWrap(inner)
+                })
+              }
+            }
+          } ~
+          withJsonMediaTypeIfNotExists {
+            respondWithHeaders(RawHeader("Cache-Control", "no-cache, no-store, must-revalidate")) {
+              inner
+            }
+          }
+        }
+      }
+    }
+
+  private def commonRoutesWrap(inner: Route): Route =
+    mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
+      mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
+        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+          handleErrors(DefaultErrorFormatter) {
+            pathSuffix(Slash.?) {
+              path("metrics") {
+                get {
+                  completeWith(Marshaller.StringMarshaller) { complete ⇒
+                    val writer = new StringWriter()
+                    TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                    complete(writer.toString)
                   }
                 }
+              } ~
+              path("robots.txt") {
+                get {
+                  completeWith(Marshaller.StringMarshaller) { complete ⇒
+                    complete(robotsTxt)
+                  }
+                }
+              } ~
+              globalPathPrefix {
+                inner
               }
             }
           }

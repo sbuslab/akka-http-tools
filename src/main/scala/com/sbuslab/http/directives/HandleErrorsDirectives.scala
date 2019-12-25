@@ -5,6 +5,7 @@ import java.sql.SQLException
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
+import ch.megard.akka.http.cors.scaladsl.{CorsDirectives, CorsRejection}
 import com.fasterxml.jackson.core.JsonProcessingException
 
 import com.sbuslab.model._
@@ -31,7 +32,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
         "_embedded" → e._embedded,
       ))
 
-    case e: SQLException ⇒
+    case _: SQLException ⇒
       serialize(Map("error" → "internal-error", "message" → "Database error"))
 
     case e: Throwable ⇒
@@ -92,7 +93,8 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
     }
 
   private def customRejectionHandler =
-    RejectionHandler.default
+    CorsDirectives.corsRejectionHandler
+      .withFallback(RejectionHandler.default)
       .mapRejectionResponse {
         case res @ HttpResponse(_, _, _: HttpEntity.Strict, _) ⇒
           res.copy(entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(res)))

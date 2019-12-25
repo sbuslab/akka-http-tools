@@ -7,7 +7,6 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import akka.NotUsed
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
@@ -15,6 +14,7 @@ import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
+import akka.NotUsed
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonRawValue}
 
 import com.sbuslab.http.directives.HandleErrorsDirectives
@@ -47,14 +47,14 @@ case class Subscription(connection: ActorRef, correlationId: Option[String]) {
 
 trait WebsocketHandlerDirective extends Directives with JsonFormatter with Logging {
 
-  def handleWebsocketRequest(routes: Route)(implicit system: ActorSystem, ec: ExecutionContext, mat: ActorMaterializer): Flow[Any, TextMessage.Strict, (NotUsed, Unit)] = {
+  def handleWebsocketRequest(initRequest: HttpRequest, routes: Route)(implicit system: ActorSystem, ec: ExecutionContext, mat: ActorMaterializer): Flow[Any, TextMessage.Strict, (NotUsed, Unit)] = {
     val wrappedRoutes = optionalHeaderValueByName(Headers.CorrelationId) { corrId ⇒
       respondWithHeaders(corrId.map(cid ⇒ RawHeader(Headers.CorrelationId, cid)).toList: _*) {
         routes
       }
     }
 
-    val sinkActorRef = system.actorOf(Props(new WsRequestHandler(wrappedRoutes)), "ws-handler-" + UUID.randomUUID().toString)
+    val sinkActorRef = system.actorOf(Props(new WsRequestHandler(wrappedRoutes, initRequest)), "ws-handler-" + UUID.randomUUID().toString)
     val sink = Sink.actorRef(sinkActorRef, PoisonPill)
 
     val source = Source.actorRef[WsResponse](Int.MaxValue, OverflowStrategy.fail) mapMaterializedValue { clientConnection ⇒
@@ -82,7 +82,14 @@ trait WebsocketHandlerDirective extends Directives with JsonFormatter with Loggi
 }
 
 
-class WsRequestHandler(routes: Route)(implicit ec: ExecutionContext, mat: ActorMaterializer) extends Actor with HandleErrorsDirectives {
+class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: ExecutionContext, mat: ActorMaterializer) extends Actor with HandleErrorsDirectives {
+
+  private val defaultHeaders: List[akka.http.scaladsl.model.HttpHeader] = List(
+    Seq(RawHeader(Headers.ConnectionHandlerRef, self.path.toString)),
+    initRequest.headers[akka.http.javadsl.model.headers.Cookie],
+    initRequest.headers[akka.http.javadsl.model.headers.UserAgent],
+    initRequest.headers[akka.http.javadsl.model.headers.XForwardedFor]
+  ).flatten
 
   override def receive: Receive = {
     case clientConnection: ActorRef ⇒
@@ -157,7 +164,7 @@ class WsRequestHandler(routes: Route)(implicit ec: ExecutionContext, mat: ActorM
           .getOrElse(throw new ErrorMessage(StatusCodes.MethodNotAllowed.intValue, s"Unsupported method: $method")),
 
         uri = Uri(request.path("uri").asText("/")),
-        headers = RawHeader(Headers.ConnectionHandlerRef, self.path.toString) :: headers,
+        headers = defaultHeaders ::: headers,
 
         entity = HttpEntity(
           headers.find(_.is("content-type"))

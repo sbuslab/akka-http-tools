@@ -17,7 +17,13 @@ object ValidationDirectives {
 trait ValidationDirectives extends Directives with Logging {
   import ValidationDirectives._
 
-  def validate[T](entity: T): Directive0 = {
+  def validate[T](entity: T): Directive0 =
+    doValidate(entity) match {
+      case null ⇒ pass
+      case e    ⇒ failWith(e)
+    }
+
+  def doValidate[T](entity: T): Exception = {
     val errors = validator.validate(entity)
 
     if (errors.size() != 0) {
@@ -27,7 +33,7 @@ trait ValidationDirectives extends Directives with Logging {
 
       log.warn(s"BadRequestError: $msg for ${entity.toString.take(1024)}")
 
-      failWith(new BadRequestError(msg, null, "validation-error"))
-    } else pass
+      new BadRequestError(msg, null, "validation-error")
+    } else null
   }
 }

@@ -27,7 +27,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
     case e: ErrorMessage ⇒
       serialize(Map(
         "error"     → dasherize(Option(e.error).getOrElse(StatusCode.int2StatusCode(e.code).reason)),
-        "message"   → e.getMessage,
+        "message"   → sanitizeMessage(e.getMessage),
         "_links"    → e._links,
         "_embedded" → e._embedded,
       ))
@@ -38,16 +38,23 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
     case e: Throwable ⇒
       serialize(Map(
         "error"   → "internal-error",
-        "message" → e.getMessage,
+        "message" → sanitizeMessage(e.getMessage),
       ))
 
     case HttpResponse(status, headers, ent: HttpEntity.Strict, _) ⇒
       if (!headers.exists(_.name == ErrorHandlerHeader)) {
-        serialize(Map("error" → dasherize(status.reason), "message" → ent.data.utf8String))
+        serialize(Map("error" → dasherize(status.reason), "message" → sanitizeMessage(ent.data.utf8String)))
       } else {
         ent.data.utf8String
       }
   }
+
+  private def sanitizeMessage(msg: String) =
+    if (msg.contains("SQL")) {
+      "Database error"
+    } else {
+      msg
+    }
 
   def handleErrors(formatter: ErrorFormatter): Directive0 =
     handleExceptions(customExceptionHandler(formatter)) &

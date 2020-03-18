@@ -50,10 +50,12 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
   }
 
   private def sanitizeMessage(msg: String) =
-    if (msg.contains("SQL")) {
+    if (msg == null) {
+      null
+    } else if (msg.contains("SQL")) {
       "Database error"
     } else {
-      msg
+      msg.take(2048)
     }
 
   def handleErrors(formatter: ErrorFormatter): Directive0 =

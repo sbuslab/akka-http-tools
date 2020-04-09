@@ -10,7 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.{Component, Service}
 
-import com.sbuslab.utils.{Digest, Logging, MemcacheSupport}
+import com.sbuslab.utils.{Digest, JsonFormatter, Logging, MemcacheSupport}
 
 
 sealed trait CheckLimitResult
@@ -93,7 +93,7 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
             log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
 
             if (cnt >= cntConfig.max) {
-              log.trace(s"Rate limit exceeded for $action ($success) by $keyName=$keyValue! Max: ${cntConfig.max}")
+              log.trace(s"Rate limit exceeded for $action (${if (success) "success" else "failure"}) by $keyName=$keyValue! Config: ${JsonFormatter.serialize(cntConfig)}")
               storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
             }
           }

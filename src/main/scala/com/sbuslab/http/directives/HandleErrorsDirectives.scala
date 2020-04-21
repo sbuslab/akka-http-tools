@@ -85,10 +85,6 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
         log.debug(e.getMessage, e)
         complete(StatusCodes.BadRequest, formatter.applyOrElse(new BadRequestError(e.getMessage, e), DefaultErrorFormatter))
 
-      case e: IllegalStateException ⇒
-        log.debug(e.getMessage, e)
-        complete(StatusCodes.Conflict, formatter.applyOrElse(new ConflictError(e.getMessage, e), DefaultErrorFormatter))
-
       case e: java.io.FileNotFoundException ⇒
         complete(StatusCodes.NotFound, formatter.applyOrElse(new NotFoundError(e.getMessage, e), DefaultErrorFormatter))
 

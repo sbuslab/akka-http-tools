@@ -79,7 +79,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
 
       case e: Throwable if e.getCause != null && e.getCause.isInstanceOf[IllegalArgumentException] ⇒
         log.debug(e.getMessage, e)
-        complete(StatusCodes.BadRequest, formatter.applyOrElse(new ErrorMessage(400, e.getCause.getMessage, e), DefaultErrorFormatter))
+        complete(StatusCodes.BadRequest, formatter.applyOrElse(new BadRequestError(e.getCause.getMessage, e), DefaultErrorFormatter))
 
       case e @ (_: IllegalArgumentException | _: JsonProcessingException | _: IllegalUriException) ⇒
         log.debug(e.getMessage, e)

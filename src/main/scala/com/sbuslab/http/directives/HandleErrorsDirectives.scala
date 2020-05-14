@@ -81,7 +81,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
         log.debug(e.getMessage, e)
         complete(StatusCodes.BadRequest, formatter.applyOrElse(new BadRequestError(e.getCause.getMessage, e), DefaultErrorFormatter))
 
-      case e @ (_: IllegalArgumentException | _: JsonProcessingException | _: IllegalUriException) ⇒
+      case e @ (_: IllegalArgumentException | _: JsonProcessingException | _: IllegalUriException | _: NullPointerException) ⇒
         log.debug(e.getMessage, e)
         complete(StatusCodes.BadRequest, formatter.applyOrElse(new BadRequestError(e.getMessage, e), DefaultErrorFormatter))
 

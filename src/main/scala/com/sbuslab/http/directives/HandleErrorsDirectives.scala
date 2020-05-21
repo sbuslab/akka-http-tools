@@ -54,6 +54,8 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
       null
     } else if (msg.contains("SQL")) {
       "Database error"
+    } else if (msg.startsWith("Can't deserialize")) {
+      "Can't deserialize JSON message"
     } else {
       msg.take(2048)
     }

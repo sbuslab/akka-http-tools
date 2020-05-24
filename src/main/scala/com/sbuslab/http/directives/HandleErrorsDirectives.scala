@@ -52,10 +52,10 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
   private def sanitizeMessage(msg: String) =
     if (msg == null) {
       null
-    } else if (msg.contains("SQL")) {
-      "Database error"
     } else if (msg.startsWith("Can't deserialize")) {
       "Can't deserialize JSON message"
+    } else if (msg.contains("SQL")) {
+      "Database error"
     } else {
       msg.take(2048)
     }

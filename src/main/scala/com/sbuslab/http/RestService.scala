@@ -160,9 +160,11 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     }
 
   private def stringifySource(data: HttpEntity): String =
-    try Await.result(data.toStrict(1.second), 1.second).data.utf8String.trim.take(4096) catch {
-      case e: Throwable ⇒ "Error on stringify body: " + e.getMessage
-    }
+    if (data.isStrict()) {
+      try Await.result(data.toStrict(1.second), 1.second).data.utf8String.trim.take(4096) catch {
+        case e: Throwable ⇒ "Error on stringify body: " + e.getMessage
+      }
+    } else "Couldn't stringify body: non strict data"
 
   private def accessLogger(start: Long)(request: HttpRequest)(result: Any): Unit = {
     val requestBody =

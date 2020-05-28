@@ -93,7 +93,7 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
             log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
 
             if (cnt >= cntConfig.max) {
-              log.trace(s"Rate limit exceeded for $action (${if (success) "success" else "failure"}) by $keyName=$keyValue! Config: ${JsonFormatter.serialize(cntConfig)}")
+              log.info(s"Rate limit exceeded for $action (${if (success) "success" else "failure"}) by $keyName=$keyValue! Keys: $keys. Config: ${JsonFormatter.serialize(cntConfig)}")
               storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
             }
           }

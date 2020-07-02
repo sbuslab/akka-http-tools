@@ -5,12 +5,13 @@ import scala.reflect.ClassTag
 import akka.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller, ToResponseMarshaller}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server._
-import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, FromRequestUnmarshaller, Unmarshaller}
+import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
 import akka.util.ByteString
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.exc.ValueInstantiationException
 
-import com.sbuslab.model.{BadRequestError, SecureString, SecureStringSerializer}
+import com.sbuslab.model.{SecureString, SecureStringSerializer}
 import com.sbuslab.utils.JsonFormatter
 import com.sbuslab.utils.json.FacadeAnnotationIntrospector
 
@@ -39,7 +40,14 @@ trait JsonMarshallers extends Directives {
       }
 
   implicit protected def unmarshaller[A](implicit ct: ClassTag[A]): FromEntityUnmarshaller[A] =
-    jsonStringUnmarshaller.map(data ⇒ JsonFormatter.mapper.readValue(data, ct.runtimeClass).asInstanceOf[A])
+    jsonStringUnmarshaller map { data ⇒
+      try {
+        JsonFormatter.mapper.readValue(data, ct.runtimeClass).asInstanceOf[A]
+      } catch {
+        case e: ValueInstantiationException if e.getCause != null ⇒
+          throw e.getCause
+      }
+    }
 
   implicit protected val JsonMarshaller: ToEntityMarshaller[Any] =
     Marshaller.opaque[Any, MessageEntity] { m ⇒
@@ -65,10 +73,5 @@ trait JsonMarshallers extends Directives {
     extract(_.request.entity) flatMap {
       case e if e.contentType.value equalsIgnoreCase contentType ⇒ pass
       case _ ⇒ reject(UnsupportedRequestContentTypeRejection(Set(MediaType.custom(contentType, binary = false)), None))
-    }
-
-  override def entity[T](um: FromRequestUnmarshaller[T]): Directive1[T] =
-    mapRejections(rs ⇒ if (rs.nonEmpty) throw new BadRequestError(rs.mkString("; ")) else rs).tflatMap { _ ⇒
-      super.entity(um)
     }
 }

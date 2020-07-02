@@ -101,6 +101,9 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
 
   private def customRejectionHandler =
     CorsDirectives.corsRejectionHandler
+      .withFallback(RejectionHandler.newBuilder().handle {
+        case MalformedRequestContentRejection(_, cause: ErrorMessage) ⇒ throw cause
+      }.result())
       .withFallback(RejectionHandler.default)
       .mapRejectionResponse {
         case res @ HttpResponse(_, _, _: HttpEntity.Strict, _) ⇒

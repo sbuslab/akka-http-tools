@@ -4,7 +4,8 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 import akka.http.scaladsl.model.{HttpMethods, HttpResponse, RemoteAddress, StatusCodes}
-import akka.http.scaladsl.server.{Directives, ExceptionHandler, Route}
+import akka.http.scaladsl.model.headers.{`Remote-Address`, `X-Forwarded-For`, `X-Real-Ip`}
+import akka.http.scaladsl.server.{Directive1, Directives, ExceptionHandler, Route}
 
 import com.sbuslab.http.{LimitExceeded, RateLimitProvider}
 import com.sbuslab.model.TooManyRequestError
@@ -50,6 +51,12 @@ trait RateLimitDirectives extends Directives with Logging {
           incrementCounter(rlp, action, options, allKeys, inner)
       }
     }
+
+  override def extractClientIP: Directive1[RemoteAddress] =
+    headerValuePF { case `X-Forwarded-For`(addresses: Seq[_]) => addresses.last } |
+      headerValuePF { case `Remote-Address`(address) => address } |
+      headerValuePF { case `X-Real-Ip`(address) => address } |
+      provide(RemoteAddress.Unknown)
 
   private def incrementCounter(rlp: RateLimitProvider, action: String, options: RateLimitOptions, allKeys: Seq[(String, String)], inner: ⇒ Route): Route =
     extract(_.request.method) {

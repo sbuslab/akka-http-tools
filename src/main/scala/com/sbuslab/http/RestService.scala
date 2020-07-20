@@ -68,11 +68,13 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
         } ~
         path("version") {
           get {
-            complete(Map(
-              "service" → System.getenv("SERVICE_NAME"),
-              "version" → System.getenv("SERVICE_VERSION"),
-              "deployed" → System.getenv("SERVICE_DEPLOY_TIME"),
-            ))
+            extractClientIP { ip ⇒
+              complete(Map(
+                "service"  → System.getenv("SERVICE_NAME"),
+                "version"  → System.getenv("SERVICE_VERSION"),
+                "deployed" → System.getenv("SERVICE_DEPLOY_TIME"),
+              ))
+            }
           }
         } ~
         initRoutes

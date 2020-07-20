@@ -2,13 +2,13 @@ package com.sbuslab.http.directives
 
 import scala.concurrent.{ExecutionContext, Future}
 
-import akka.http.scaladsl.server.{Directive1, Directives}
+import akka.http.scaladsl.server.Directive1
 
 import com.sbuslab.http.Headers
 import com.sbuslab.sbus.Context
 
 
-trait SbusDirectives extends Directives {
+trait SbusDirectives extends RateLimitDirectives {
 
   def sbusContext: Directive1[Context] = {
     (extractClientIP & optionalHeaderValueByName("User-Agent")).tflatMap { case (ip, userAgent) ⇒

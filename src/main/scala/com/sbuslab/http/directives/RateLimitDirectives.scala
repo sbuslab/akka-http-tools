@@ -85,7 +85,7 @@ trait RateLimitDirectives extends Directives with Logging {
 
   private def collectAllKeys(ip: RemoteAddress, keys: Seq[(String, Any)]) = {
     (Map("ip" → ip.value) ++ keys collect {
-      case (k, v) if v != None ⇒ k → v.toString
+      case (k, v) if v != null && v != None ⇒ k → v.toString
     }).toSeq
   }
 }

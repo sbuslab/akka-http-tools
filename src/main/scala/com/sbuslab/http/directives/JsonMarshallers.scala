@@ -9,7 +9,6 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
 import akka.util.ByteString
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.exc.ValueInstantiationException
 
 import com.sbuslab.model.{SecureString, SecureStringSerializer}
 import com.sbuslab.utils.JsonFormatter
@@ -41,12 +40,7 @@ trait JsonMarshallers extends Directives {
 
   implicit protected def unmarshaller[A](implicit ct: ClassTag[A]): FromEntityUnmarshaller[A] =
     jsonStringUnmarshaller map { data ⇒
-      try {
-        JsonFormatter.mapper.readValue(data, ct.runtimeClass).asInstanceOf[A]
-      } catch {
-        case e: ValueInstantiationException if e.getCause != null ⇒
-          throw e.getCause
-      }
+      JsonFormatter.mapper.readValue(data, ct.runtimeClass).asInstanceOf[A]
     }
 
   implicit protected val JsonMarshaller: ToEntityMarshaller[Any] =
@@ -71,7 +65,7 @@ trait JsonMarshallers extends Directives {
    */
   def contentType[T](contentType: String): Directive0 =
     extract(_.request.entity) flatMap {
-      case e if e.contentType.value equalsIgnoreCase contentType ⇒ pass
+      case e if e.contentType.value.equalsIgnoreCase(contentType) ⇒ pass
       case _ ⇒ reject(UnsupportedRequestContentTypeRejection(Set(MediaType.custom(contentType, binary = false)), None))
     }
 }

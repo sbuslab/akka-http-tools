@@ -5,7 +5,7 @@ import java.sql.SQLException
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
-import ch.megard.akka.http.cors.scaladsl.{CorsDirectives, CorsRejection}
+import ch.megard.akka.http.cors.scaladsl.CorsDirectives
 import com.fasterxml.jackson.core.JsonProcessingException
 
 import com.sbuslab.model._
@@ -105,6 +105,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
     CorsDirectives.corsRejectionHandler
       .withFallback(RejectionHandler.newBuilder().handle {
         case MalformedRequestContentRejection(_, cause: ErrorMessage) ⇒ throw cause
+        case MalformedRequestContentRejection(_, cause: Throwable) if cause.getCause != null && cause.getCause.isInstanceOf[ErrorMessage] ⇒ throw cause.getCause
       }.result())
       .withFallback(RejectionHandler.default)
       .mapRejectionResponse {

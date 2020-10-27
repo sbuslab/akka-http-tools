@@ -73,11 +73,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
         log.debug(e.getMessage, e)
         complete(StatusCodes.getForKey(e.code).getOrElse(StatusCodes.custom(e.code, e.getMessage)), formatter.applyOrElse(e, DefaultErrorFormatter))
 
-      case e: scala.concurrent.TimeoutException ⇒
-        log.debug(e.getMessage, e)
-        complete(StatusCodes.GatewayTimeout, formatter.applyOrElse(new ErrorMessage(504, "Request timed out, please try again later.", error = "timeout", cause = e), DefaultErrorFormatter))
-
-      case e: akka.pattern.CircuitBreakerOpenException ⇒
+      case e @ (_: scala.concurrent.TimeoutException | _: akka.pattern.AskTimeoutException | _: akka.pattern.CircuitBreakerOpenException) ⇒
         log.debug(e.getMessage, e)
         complete(StatusCodes.GatewayTimeout, formatter.applyOrElse(new ErrorMessage(504, "Request timed out, please try again later.", error = "timeout", cause = e), DefaultErrorFormatter))
 

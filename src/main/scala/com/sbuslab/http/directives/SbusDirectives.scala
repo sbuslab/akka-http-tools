@@ -1,14 +1,16 @@
 package com.sbuslab.http.directives
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.{Duration, _}
 
-import akka.http.scaladsl.server.Directive1
+import akka.http.scaladsl.server.{Directive1, Route}
 
 import com.sbuslab.http.Headers
 import com.sbuslab.sbus.Context
 
 
 trait SbusDirectives extends RateLimitDirectives {
+  this: HandleErrorsDirectives ⇒
 
   def sbusContext: Directive1[Context] = {
     (extractClientIP & optionalHeaderValueByName("User-Agent")).tflatMap { case (ip, userAgent) ⇒
@@ -23,6 +25,11 @@ trait SbusDirectives extends RateLimitDirectives {
       }
     }
   }
+
+  def contextTimeout(timeout: Duration)(inner: Context ⇒ Route)(implicit context: Context) =
+    withRequestTimeout(timeout.plus(1.second)) {
+      inner(context.withTimeout(timeout))
+    }
 
   @scala.annotation.tailrec
   final def wrap(field: String*)(f: Future[_])(implicit ec: ExecutionContext): Future[_] =

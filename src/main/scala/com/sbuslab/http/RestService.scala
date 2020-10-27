@@ -9,7 +9,7 @@ import scala.util.{Failure, Success}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshaller
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpRequest, MediaTypes}
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.server.directives.LoggingMagnet
@@ -24,6 +24,7 @@ import io.prometheus.client.hotspot.DefaultExports
 import org.slf4j.MDC
 
 import com.sbuslab.http.directives._
+import com.sbuslab.model.ErrorMessage
 import com.sbuslab.utils.Logging
 
 
@@ -124,27 +125,31 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   private def commonRoutesWrap(inner: Route): Route =
     mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
       mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-          handleErrors(DefaultErrorFormatter) {
-            pathSuffix(Slash.?) {
-              path("metrics") {
-                get {
-                  completeWith(Marshaller.StringMarshaller) { complete ⇒
-                    val writer = new StringWriter()
-                    TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                    complete(writer.toString)
+        withRequestTimeoutResponse(_ ⇒ {
+          HttpResponse(status = StatusCodes.GatewayTimeout, entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(new ErrorMessage(504, "Request timeout"))))
+        }) {
+          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+            handleErrors(DefaultErrorFormatter) {
+              pathSuffix(Slash.?) {
+                path("metrics") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      val writer = new StringWriter()
+                      TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                      complete(writer.toString)
+                    }
                   }
-                }
-              } ~
-              path("robots.txt") {
-                get {
-                  completeWith(Marshaller.StringMarshaller) { complete ⇒
-                    complete(robotsTxt)
+                } ~
+                path("robots.txt") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      complete(robotsTxt)
+                    }
                   }
+                } ~
+                globalPathPrefix {
+                  inner
                 }
-              } ~
-              globalPathPrefix {
-                inner
               }
             }
           }

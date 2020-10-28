@@ -194,7 +194,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           s"<--- ${response.status} ${System.currentTimeMillis - start} ms" +
           (if (logBody) s"$requestBody \n\n${stringifySource(response.entity)}" else "")
 
-        if (response.status.isSuccess || response.status.intValue == 404) {
+        if (response.status.isSuccess || response.status.intValue == 404 || response.status.intValue == 429) {
           log.info(msg)
         } else {
           log.warn(msg)

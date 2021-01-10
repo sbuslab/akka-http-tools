@@ -115,7 +115,11 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           } ~
           withJsonMediaTypeIfNotExists {
             respondWithHeaders(RawHeader("Cache-Control", "no-cache, no-store, must-revalidate")) {
-              inner
+              withRequestTimeoutResponse(_ ⇒ {
+                HttpResponse(status = StatusCodes.GatewayTimeout, entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(new ErrorMessage(504, "Request timeout"))))
+              }) {
+                inner
+              }
             }
           }
         }
@@ -125,31 +129,27 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   private def commonRoutesWrap(inner: Route): Route =
     mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
       mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-        withRequestTimeoutResponse(_ ⇒ {
-          HttpResponse(status = StatusCodes.GatewayTimeout, entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(new ErrorMessage(504, "Request timeout"))))
-        }) {
-          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-            handleErrors(DefaultErrorFormatter) {
-              pathSuffix(Slash.?) {
-                path("metrics") {
-                  get {
-                    completeWith(Marshaller.StringMarshaller) { complete ⇒
-                      val writer = new StringWriter()
-                      TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                      complete(writer.toString)
-                    }
+        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+          handleErrors(DefaultErrorFormatter) {
+            pathSuffix(Slash.?) {
+              path("metrics") {
+                get {
+                  completeWith(Marshaller.StringMarshaller) { complete ⇒
+                    val writer = new StringWriter()
+                    TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                    complete(writer.toString)
                   }
-                } ~
-                path("robots.txt") {
-                  get {
-                    completeWith(Marshaller.StringMarshaller) { complete ⇒
-                      complete(robotsTxt)
-                    }
-                  }
-                } ~
-                globalPathPrefix {
-                  inner
                 }
+              } ~
+              path("robots.txt") {
+                get {
+                  completeWith(Marshaller.StringMarshaller) { complete ⇒
+                    complete(robotsTxt)
+                  }
+                }
+              } ~
+              globalPathPrefix {
+                inner
               }
             }
           }

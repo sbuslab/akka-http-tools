@@ -182,6 +182,10 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       MDC.put("correlation_id", corrId.value())
     }
 
+    request.getHeader("http_x_forwarded_for") ifPresent { ip ⇒
+      MDC.put("http_x_forwarded_for", ip.value())
+    }
+
     result match {
       case RouteResult.Complete(response) ⇒
         def msg =

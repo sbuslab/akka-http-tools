@@ -10,11 +10,12 @@ import scala.util.control.NonFatal
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.ws.TextMessage
+import akka.http.scaladsl.model.ws.{BinaryMessage, TextMessage}
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.NotUsed
+import akka.util.ByteString
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonRawValue}
 
 import com.sbuslab.http.directives.HandleErrorsDirectives
@@ -121,17 +122,30 @@ class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: Exe
 
   def handleRequests(clientConnection: ActorRef): Receive = {
     case TextMessage.Streamed(stream) ⇒
-      stream.limit(100).completionTimeout(5.seconds).runFold("")(_ + _) onComplete {
+      stream.limit(1000).completionTimeout(5.seconds).runFold("")(_ + _) onComplete {
         case Success(message) ⇒
           handleMessage(message)
 
         case Failure(e) ⇒
           log.error("Error on handle streamed ws message: " + e.getMessage, e)
-          self ! WsResponse(status = 400, body = serialize(e.getMessage))
+          self ! WsResponse(status = 400, body = serialize(Map("error" → "bad-request", "message" → e.getMessage)))
       }
 
     case TextMessage.Strict(message) ⇒
       handleMessage(message)
+
+    case BinaryMessage.Streamed(stream) ⇒
+      stream.limit(1000).completionTimeout(5.seconds).runFold(ByteString.empty)(_ ++ _) onComplete {
+        case Success(message) ⇒
+          handleMessage(message.utf8String)
+
+        case Failure(e) ⇒
+          log.error("Error on handle streamed ws message: " + e.getMessage, e)
+          self ! WsResponse(status = 400, body = serialize(Map("error" → "bad-request", "message" → e.getMessage)))
+      }
+
+    case BinaryMessage.Strict(message) ⇒
+      handleMessage(message.utf8String)
 
     case response: WsResponse ⇒
       log.trace("<--- {}", response.toString.take(1024))

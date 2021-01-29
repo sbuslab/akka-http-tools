@@ -35,7 +35,7 @@ case class WsResponse(
 case class RegisterTerminationCallback(f: () ⇒ Unit)
 
 
-case class Subscription(connection: ActorRef, correlationId: Option[String]) {
+case class Subscription(connection: ActorRef, correlationId: Option[String], method: HttpMethod) {
   def send(status: Int, body: Any, headers: Map[String, String] = Map.empty) {
     connection ! WsResponse(status, headers + (Headers.CorrelationId → correlationId.getOrElse("")), JsonFormatter.serialize(body))
   }
@@ -71,11 +71,13 @@ trait WebsocketHandlerDirective extends Directives with JsonFormatter with Loggi
   }
 
   def subscribe(inner: Subscription ⇒ Route)(implicit system: ActorSystem): Route =
-    method(CustomMethods.SUBSCRIBE) {
-      headerValueByName(Headers.ConnectionHandlerRef) { connRef ⇒
-        optionalHeaderValueByName(Headers.CorrelationId) { corrId ⇒
-          onSuccess(system.actorSelection(connRef).resolveOne(213.millis)) { connActorRef ⇒
-            inner(Subscription(connActorRef, corrId))
+    (method(CustomMethods.SUBSCRIBE) | method(CustomMethods.UNSUBSCRIBE)) {
+      extractMethod { method ⇒
+        headerValueByName(Headers.ConnectionHandlerRef) { connRef ⇒
+          optionalHeaderValueByName(Headers.CorrelationId) { corrId ⇒
+            onSuccess(system.actorSelection(connRef).resolveOne(213.millis)) { connActorRef ⇒
+              inner(Subscription(connActorRef, corrId, method))
+            }
           }
         }
       }

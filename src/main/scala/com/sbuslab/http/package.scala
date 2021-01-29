@@ -12,11 +12,12 @@ package object http {
   }
 
   object CustomMethods {
-    val PING      = HttpMethod.custom(name = "PING", safe = true, idempotent = true, requestEntityAcceptance = Tolerated)
-    val SUBSCRIBE = HttpMethod.custom(name = "SUBSCRIBE", safe = true, idempotent = true, requestEntityAcceptance = Tolerated)
-    val GENERATE  = HttpMethod.custom(name = "GENERATE", safe = false, idempotent = false, requestEntityAcceptance = Tolerated)
+    val PING        = HttpMethod.custom(name = "PING", safe = true, idempotent = true, requestEntityAcceptance = Tolerated)
+    val SUBSCRIBE   = HttpMethod.custom(name = "SUBSCRIBE", safe = true, idempotent = true, requestEntityAcceptance = Tolerated)
+    val UNSUBSCRIBE = HttpMethod.custom(name = "UNSUBSCRIBE", safe = true, idempotent = true, requestEntityAcceptance = Tolerated)
+    val GENERATE    = HttpMethod.custom(name = "GENERATE", safe = false, idempotent = false, requestEntityAcceptance = Tolerated)
 
-    private val all = Set(SUBSCRIBE, PING, GENERATE).map(m ⇒ m.value → m).toMap
+    private val all = Set(PING, SUBSCRIBE, UNSUBSCRIBE, GENERATE).map(m ⇒ m.value → m).toMap
 
     def getForKey(m: String) = all.get(m)
   }

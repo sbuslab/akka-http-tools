@@ -16,7 +16,7 @@ import com.sbuslab.utils.json.FacadeAnnotationIntrospector
 
 
 object JsonMarshallers {
-  private lazy val writerMapper: ObjectMapper = {
+  lazy val jsonWriterMapper: ObjectMapper = {
     val m = JsonFormatter.mapper.copy()
     m.setConfig(m.getSerializationConfig.withAppendedAnnotationIntrospector(new FacadeAnnotationIntrospector))
 
@@ -24,6 +24,8 @@ object JsonMarshallers {
     secureStringModule.addSerializer(classOf[SecureString], new SecureStringSerializer())
     m.registerModule(secureStringModule)
   }
+
+  lazy val jsonReaderMapper: ObjectMapper = JsonFormatter.mapper.copy()
 }
 
 
@@ -40,12 +42,12 @@ trait JsonMarshallers extends Directives {
 
   implicit protected def unmarshaller[A](implicit ct: ClassTag[A]): FromEntityUnmarshaller[A] =
     jsonStringUnmarshaller map { data ⇒
-      JsonFormatter.mapper.readValue(data, ct.runtimeClass).asInstanceOf[A]
+      jsonReaderMapper.readValue(data, ct.runtimeClass).asInstanceOf[A]
     }
 
   implicit protected val JsonMarshaller: ToEntityMarshaller[Any] =
     Marshaller.opaque[Any, MessageEntity] { m ⇒
-      HttpEntity.Strict(ContentTypes.`application/json`, ByteString(writerMapper.writeValueAsBytes(m)))
+      HttpEntity.Strict(ContentTypes.`application/json`, ByteString(jsonWriterMapper.writeValueAsBytes(m)))
     }
 
   implicit protected val StatusCodeMarshaller: ToResponseMarshaller[StatusCode] =

@@ -156,6 +156,10 @@ class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: Exe
     case RegisterTerminationCallback(f) ⇒
       terminationCallbacks ::= f
 
+    case Failure(e) ⇒
+      log.info(s"Received: $e")
+      self ! PoisonPill
+
     case other ⇒
       log.error(s"Receive unexpected message: $other")
   }

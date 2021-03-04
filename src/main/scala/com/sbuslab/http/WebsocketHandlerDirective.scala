@@ -161,7 +161,7 @@ class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: Exe
       self ! PoisonPill
 
     case other ⇒
-      log.error(s"Receive unexpected message: $other")
+      log.error(s"Receive unexpected message: ${other.getClass.getName} $other")
   }
 
   private def handleMessage(message: String) {

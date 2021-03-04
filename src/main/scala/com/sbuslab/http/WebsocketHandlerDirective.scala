@@ -156,7 +156,7 @@ class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: Exe
     case RegisterTerminationCallback(f) ⇒
       terminationCallbacks ::= f
 
-    case Failure(e) ⇒
+    case akka.actor.Status.Failure(e) ⇒
       log.info(s"Received: $e")
       self ! PoisonPill
 

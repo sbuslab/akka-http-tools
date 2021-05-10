@@ -17,7 +17,7 @@ trait SbusDirectives extends RateLimitDirectives {
       val sbusCtx = Context(Map(
         "ip"        → ip.value,
         "userAgent" → userAgent.orNull
-      ))
+      ).filter(_._2 != null))
 
       optionalHeaderValueByName(Headers.CorrelationId).flatMap {
         case Some(corrId) ⇒ provide(sbusCtx.withCorrelationId(corrId))

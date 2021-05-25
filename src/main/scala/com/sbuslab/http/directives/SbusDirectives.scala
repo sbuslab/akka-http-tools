@@ -20,8 +20,8 @@ trait SbusDirectives extends RateLimitDirectives {
       ).filter(_._2 != null))
 
       optionalHeaderValueByName(Headers.CorrelationId).flatMap {
-        case Some(corrId) ⇒ provide(sbusCtx.withCorrelationId(corrId))
-        case _            ⇒ provide(sbusCtx)
+        case Some(corrId) if corrId != "sbus:ping" ⇒ provide(sbusCtx.withCorrelationId(corrId))
+        case _ ⇒ provide(sbusCtx)
       }
     }
   }

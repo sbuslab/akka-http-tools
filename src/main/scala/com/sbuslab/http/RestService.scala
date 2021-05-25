@@ -52,9 +52,10 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
 
   implicit val timeout = Timeout(10.seconds)
 
-  private val logBody      = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
-  private val robotsTxt    = if (conf.hasPath("robots-txt")) conf.getString("robots-txt") else "User-agent: *\nDisallow: /"
-  private val corsSettings = CorsSettings(system)
+  private val logBody               = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
+  private val robotsTxt             = if (conf.hasPath("robots-txt")) conf.getString("robots-txt") else "User-agent: *\nDisallow: /"
+  private val internalNetworkPrefix = if (conf.hasPath("internal-network-prefix")) conf.getString("internal-network-prefix") else "127.0.0.1"
+  private val corsSettings          = CorsSettings(system)
 
 
   def start(initRoutes: ⇒ Route) {
@@ -134,10 +135,18 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             pathSuffix(Slash.?) {
               path("metrics") {
                 get {
-                  completeWith(Marshaller.StringMarshaller) { complete ⇒
-                    val writer = new StringWriter()
-                    TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                    complete(writer.toString)
+                  extractClientIP { ip ⇒
+                    log.debug(s"IP: $ip, ${ip.value}")
+
+                    if (ip.value.startsWith(internalNetworkPrefix)) {
+                      completeWith(Marshaller.StringMarshaller) { complete ⇒
+                        val writer = new StringWriter()
+                        TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                        complete(writer.toString)
+                      }
+                    } else {
+                      complete(404)
+                    }
                   }
                 }
               } ~

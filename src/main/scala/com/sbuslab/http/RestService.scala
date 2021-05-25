@@ -24,7 +24,7 @@ import io.prometheus.client.hotspot.DefaultExports
 import org.slf4j.MDC
 
 import com.sbuslab.http.directives._
-import com.sbuslab.model.ErrorMessage
+import com.sbuslab.model.{ErrorMessage, NotFoundError}
 import com.sbuslab.utils.Logging
 
 
@@ -143,7 +143,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
                         complete(writer.toString)
                       }
                     } else {
-                      complete(StatusCodes.NotFound)
+                      failWith(new NotFoundError("The requested resource could not be found."))
                     }
                   }
                 }

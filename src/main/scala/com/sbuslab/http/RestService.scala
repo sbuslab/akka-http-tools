@@ -54,7 +54,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
 
   private val logBody               = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
   private val robotsTxt             = if (conf.hasPath("robots-txt")) conf.getString("robots-txt") else "User-agent: *\nDisallow: /"
-  private val internalNetworkPrefix = if (conf.hasPath("internal-network-prefix")) conf.getString("internal-network-prefix") else "127.0.0.1"
+  private val internalNetworkPrefix = if (conf.hasPath("internal-network-prefix")) conf.getString("internal-network-prefix") else "unknown"
   private val corsSettings          = CorsSettings(system)
 
 
@@ -136,8 +136,6 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
               path("metrics") {
                 get {
                   extractClientIP { ip ⇒
-                    log.debug(s"IP: $ip, ${ip.value}")
-
                     if (ip.value.startsWith(internalNetworkPrefix)) {
                       completeWith(Marshaller.StringMarshaller) { complete ⇒
                         val writer = new StringWriter()
@@ -145,7 +143,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
                         complete(writer.toString)
                       }
                     } else {
-                      complete(404)
+                      complete(StatusCodes.NotFound)
                     }
                   }
                 }

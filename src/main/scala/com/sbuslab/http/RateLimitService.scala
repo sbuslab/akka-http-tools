@@ -148,6 +148,8 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
 @Autowired
 class RateLimitStorage(memcache: MemcachedClient) extends MemcacheSupport {
 
+  override val disabledMemoizeMemcached: Boolean = sys.env.getOrElse("DISABLED_MEMOIZE_CACHE", "false") == "true"
+
   private val empty = Future.successful(new java.util.HashMap[String, AnyRef])
 
   def get(keys: Seq[String]): Future[java.util.Map[String, AnyRef]] =

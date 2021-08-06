@@ -62,7 +62,7 @@ modifyPom {
 }
 
 dependencies {
-    compile 'com.sbuslab:utils:[1.2.0,1.3.0)'
+    compile 'com.sbuslab:utils:[1.3.0,1.4.0)'
 
     compile 'ch.megard:akka-http-cors_2.12:0.4.1'
 

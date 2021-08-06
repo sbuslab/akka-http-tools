@@ -1,0 +1,9 @@
+info:
+  name: sbuslab-akka-http-tools
+  version: "1.2"
+
+include:
+  - file: /etc/serve/include.d/library.yml
+
+build:
+  - gradle: publish

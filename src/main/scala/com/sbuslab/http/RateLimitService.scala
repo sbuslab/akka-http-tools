@@ -76,8 +76,6 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
    * Reset failure counter on success result if it specified in config file (clear-on-success = true)
    */
   def increment(success: Boolean, action: String, keys: Seq[(String, String)]) {
-    log.trace(s"increment($success, $action, $keys)")
-
     filterExcludes(keys) foreach { case (keyName, keyValue) ⇒
       if (success && findConfig(action, FailResult, keyName).exists(_.clearOnSuccess)) {
           log.trace(s"Reset rate limit for: $action, $FailResult, $keyName, $keyValue")
@@ -93,7 +91,7 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
             log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
 
             if (cnt >= cntConfig.max) {
-              log.info(s"Rate limit exceeded for $action (${if (success) "success" else "failure"}) by $keyName=$keyValue! Keys: $keys. Config: ${JsonFormatter.serialize(cntConfig)}")
+              log.info(s"Rate limit exceeded for $action (${if (success) "success" else "failure"}) by $keyName=$keyValue! Keys: $keys. Memcache: $cntKey, Config: ${JsonFormatter.serialize(cntConfig)}")
               storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
             }
           }

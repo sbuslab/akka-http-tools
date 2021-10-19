@@ -5,6 +5,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 import com.typesafe.config.{Config, ConfigUtil}
+import io.prometheus.client.Counter
 import net.spy.memcached.MemcachedClient
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Lazy
@@ -92,6 +93,11 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
 
             if (cnt >= cntConfig.max) {
               log.info(s"Rate limit exceeded for $action (${if (success) "success" else "failure"}) by $keyName=$keyValue! Keys: $keys. Memcache: $cntKey, Config: ${JsonFormatter.serialize(cntConfig)}")
+
+              RateLimitMetrics.rateLimitExceededCount
+                .labels(action)
+                .inc()
+
               storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
             }
           }
@@ -165,4 +171,13 @@ class RateLimitStorage(memcache: MemcachedClient) extends MemcacheSupport {
   def set(key: String, ttlMillis: Long, value: Any) {
     memcache.set(key, ((System.currentTimeMillis + ttlMillis) / 1000).toInt, value)
   }
+}
+
+object RateLimitMetrics {
+
+  val rateLimitExceededCount = Counter.build()
+    .name("rate_limit_exceeded_count")
+    .help("Rate limit exceeded count")
+    .labelNames("action")
+    .register()
 }

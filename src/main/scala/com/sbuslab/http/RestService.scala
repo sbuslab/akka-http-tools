@@ -13,7 +13,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.server.directives.LoggingMagnet
-import akka.stream.ActorMaterializer
+import akka.stream.Materializer
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives
 import ch.megard.akka.http.cors.scaladsl.settings.CorsSettings
@@ -48,7 +48,7 @@ trait RestRoutes extends AllCustomDirectives {
 }
 
 
-class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionContext, mat: ActorMaterializer) extends AllCustomDirectives {
+class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionContext, mat: Materializer) extends AllCustomDirectives {
 
   implicit val timeout = Timeout(10.seconds)
 
@@ -62,23 +62,25 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     try {
       DefaultExports.initialize()
 
-      Http().bindAndHandle(startWithDirectives {
-        pathEndOrSingleSlash {
-          method(CustomMethods.PING) {
-            complete(Map("value" → "pong"))
-          }
-        } ~
-        path("version") {
-          get {
-            complete(Map(
-              "service"  → System.getenv("SERVICE_NAME"),
-              "version"  → System.getenv("SERVICE_VERSION"),
-              "deployed" → System.getenv("SERVICE_DEPLOY_TIME"),
-            ))
-          }
-        } ~
-        initRoutes
-      }, conf.getString("interface"), conf.getInt("port")) onComplete {
+      Http().newServerAt(conf.getString("interface"), conf.getInt("port")).bindFlow(
+        startWithDirectives {
+          pathEndOrSingleSlash {
+            method(CustomMethods.PING) {
+              complete(Map("value" → "pong"))
+            }
+          } ~
+          path("version") {
+            get {
+              complete(Map(
+                "service"  → System.getenv("SERVICE_NAME"),
+                "version"  → System.getenv("SERVICE_VERSION"),
+                "deployed" → System.getenv("SERVICE_DEPLOY_TIME"),
+              ))
+            }
+          } ~
+          initRoutes
+        }
+      ) onComplete {
         case Success(_) ⇒
           log.info(s"Server is listening on ${conf.getString("interface")}:${conf.getInt("port")}")
 

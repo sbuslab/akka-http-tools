@@ -12,7 +12,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.ws.{BinaryMessage, TextMessage}
 import akka.http.scaladsl.server.{Directives, Route}
-import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.stream.{Materializer, OverflowStrategy}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.NotUsed
 import akka.util.ByteString
@@ -48,7 +48,7 @@ case class Subscription(connection: ActorRef, correlationId: Option[String], met
 
 trait WebsocketHandlerDirective extends Directives with JsonFormatter with Logging {
 
-  def handleWebsocketRequest(initRequest: HttpRequest, routes: Route)(implicit system: ActorSystem, ec: ExecutionContext, mat: ActorMaterializer): Flow[Any, TextMessage.Strict, (NotUsed, Unit)] = {
+  def handleWebsocketRequest(initRequest: HttpRequest, routes: Route)(implicit system: ActorSystem, ec: ExecutionContext, mat: Materializer): Flow[Any, TextMessage.Strict, (NotUsed, Unit)] = {
     val wrappedRoutes = optionalHeaderValueByName(Headers.CorrelationId) { corrId ⇒
       respondWithHeaders(corrId.map(cid ⇒ RawHeader(Headers.CorrelationId, cid)).toList: _*) {
         routes
@@ -85,7 +85,7 @@ trait WebsocketHandlerDirective extends Directives with JsonFormatter with Loggi
 }
 
 
-class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: ExecutionContext, mat: ActorMaterializer) extends Actor with HandleErrorsDirectives {
+class WsRequestHandler(routes: Route, initRequest: HttpRequest)(implicit ec: ExecutionContext, mat: Materializer) extends Actor with HandleErrorsDirectives {
 
   private val defaultHeaders: List[akka.http.scaladsl.model.HttpHeader] = List(
     Seq(RawHeader(Headers.ConnectionHandlerRef, self.path.toString)),

@@ -93,7 +93,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
       .withFallback(RejectionHandler.default)
       .mapRejectionResponse {
         case res @ HttpResponse(_, _, _: HttpEntity.Strict, _) ⇒
-          res.copy(entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(res)))
+          res.withEntity(HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(res)))
 
         case x ⇒ x
       }

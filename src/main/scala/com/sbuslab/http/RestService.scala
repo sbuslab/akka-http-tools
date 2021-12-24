@@ -117,7 +117,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
             }
           } ~
           withJsonMediaTypeIfNotExists {
-            respondWithHeaders(RawHeader("Cache-Control", "no-cache, no-store, must-revalidate")) {
+            respondWithDefaultHeaders(RawHeader("Cache-Control", "no-cache, no-store, must-revalidate")) {
               withRequestTimeoutResponse(_ ⇒ {
                 HttpResponse(status = StatusCodes.GatewayTimeout, entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(new ErrorMessage(504, "Request timeout"))))
               }) {

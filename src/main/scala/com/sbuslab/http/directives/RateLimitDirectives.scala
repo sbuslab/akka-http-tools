@@ -45,7 +45,7 @@ trait RateLimitDirectives extends Directives with Logging {
       onComplete(rlp.check(action, allKeys)) {
         case Success(LimitExceeded) ⇒
           log.trace(s"Rate limited $action for ${allKeys.mkString(", ")}")
-          throw new TooManyRequestError("Too many requests. Rate limit exceeded!")
+          throw new TooManyRequestError("Too many invalid requests. Rate limit exceeded!")
 
         case _ ⇒
           incrementCounter(rlp, action, options, allKeys, inner)

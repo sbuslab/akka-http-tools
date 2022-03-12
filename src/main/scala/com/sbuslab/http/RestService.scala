@@ -218,6 +218,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     }
 
     MDC.remove("correlation_id")
+    MDC.remove("http_x_forwarded_for")
   }
 
   private def withJsonMediaTypeIfNotExists: Directive0 =

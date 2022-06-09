@@ -9,7 +9,7 @@ import ch.megard.akka.http.cors.scaladsl.CorsDirectives
 import com.fasterxml.jackson.core.JsonProcessingException
 
 import com.sbuslab.model._
-import com.sbuslab.utils.{JsonFormatter, Logging}
+import com.sbuslab.utils.{JsonFormatter, Logging, StringUtils}
 
 
 trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging {
@@ -26,7 +26,7 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
   def DefaultErrorFormatter: ErrorFormatter = {
     case e: ErrorMessage ⇒
       serialize(Map(
-        "error"     → dasherize(Option(e.error).getOrElse(StatusCode.int2StatusCode(e.code).reason)),
+        "error"     → dasherize(Option(e.error).orElse(StatusCodes.getForKey(e.code).map(_.reason)).getOrElse(StringUtils.toUnderscore(e.getClass.getSimpleName))),
         "message"   → ErrorMessage.sanitizeMessage(e.getMessage),
         "_links"    → e._links,
         "_embedded" → e._embedded,
@@ -98,5 +98,5 @@ trait HandleErrorsDirectives extends Directives with JsonFormatter with Logging 
         case x ⇒ x
       }
 
-  private def dasherize(s: String) = s.replaceAll("\\W+", "-").toLowerCase
+  private def dasherize(s: String) = s.replaceAll("[\\W_]+", "-").toLowerCase
 }

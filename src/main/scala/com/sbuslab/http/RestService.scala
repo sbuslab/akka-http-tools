@@ -116,13 +116,11 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
               }
             }
           } ~
-          withJsonMediaTypeIfNotExists {
-            respondWithDefaultHeaders(RawHeader("Cache-Control", "no-cache, no-store, must-revalidate")) {
-              withRequestTimeoutResponse(_ ⇒ {
-                HttpResponse(status = StatusCodes.GatewayTimeout, entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(new ErrorMessage(504, "Request timeout"))))
-              }) {
-                inner
-              }
+          respondWithDefaultHeaders(RawHeader("Cache-Control", "no-cache, no-store, must-revalidate")) {
+            withRequestTimeoutResponse(_ ⇒ {
+              HttpResponse(status = StatusCodes.GatewayTimeout, entity = HttpEntity(ContentTypes.`application/json`, DefaultErrorFormatter.apply(new ErrorMessage(504, "Request timeout"))))
+            }) {
+              inner
             }
           }
         }
@@ -130,35 +128,37 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     }
 
   private def commonRoutesWrap(inner: Route): Route =
-    mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
-      mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
-        logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
-          handleErrors(DefaultErrorFormatter) {
-            pathSuffix(Slash.?) {
-              path("metrics") {
-                get {
-                  extractClientIP { ip ⇒
-                    if (ip.value.startsWith(internalNetworkPrefix)) {
-                      completeWith(Marshaller.StringMarshaller) { complete ⇒
-                        val writer = new StringWriter()
-                        TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
-                        complete(writer.toString)
+    withJsonMediaTypeIfNotExists {
+      mapRequest(_.withDefaultHeaders(RawHeader(Headers.CorrelationId, UUID.randomUUID().toString))) {
+        mapResponseHeaders(_.filterNot(_.name == ErrorHandlerHeader)) {
+          logRequestResult(LoggingMagnet(_ ⇒ accessLogger(System.currentTimeMillis)(_))) {
+            handleErrors(DefaultErrorFormatter) {
+              pathSuffix(Slash.?) {
+                path("metrics") {
+                  get {
+                    extractClientIP { ip ⇒
+                      if (ip.value.startsWith(internalNetworkPrefix)) {
+                        completeWith(Marshaller.StringMarshaller) { complete ⇒
+                          val writer = new StringWriter()
+                          TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+                          complete(writer.toString)
+                        }
+                      } else {
+                        failWith(new NotFoundError("The requested resource could not be found."))
                       }
-                    } else {
-                      failWith(new NotFoundError("The requested resource could not be found."))
                     }
                   }
-                }
-              } ~
-              path("robots.txt") {
-                get {
-                  completeWith(Marshaller.StringMarshaller) { complete ⇒
-                    complete(robotsTxt)
+                } ~
+                  path("robots.txt") {
+                    get {
+                      completeWith(Marshaller.StringMarshaller) { complete ⇒
+                        complete(robotsTxt)
+                      }
+                    }
+                  } ~
+                  globalPathPrefix {
+                    inner
                   }
-                }
-              } ~
-              globalPathPrefix {
-                inner
               }
             }
           }

@@ -10,4 +10,4 @@ release-local:
 	gradle clean publish -Pversion="${VERSION}" --info --refresh-dependencies
 
 release:
-	gradle test uploadArchives closeAndReleaseRepository -Pversion="${VERSION}" --info
+	gradle clean publish -PpublishSonatype=true -Pversion="${VERSION}" --info --refresh-dependencies

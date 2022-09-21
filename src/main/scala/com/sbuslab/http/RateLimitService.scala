@@ -1,7 +1,9 @@
 package com.sbuslab.http
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
+import scala.collection.immutable.HashMap
+import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 import com.typesafe.config.{Config, ConfigUtil}
@@ -12,6 +14,7 @@ import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.{Component, Service}
 
 import com.sbuslab.utils.{Digest, JsonFormatter, Logging, MemcacheSupport}
+import com.sbuslab.utils.condition.ConditionalOnConfig
 
 
 sealed trait CheckLimitResult
@@ -38,7 +41,7 @@ object RateLimitProvider {
 @Autowired
 class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: ExecutionContext) extends RateLimitProvider with Logging  {
 
-  case class CounterConfig(max: Int, ttlMillis: Long, lockTimeoutMs: Long, clearOnSuccess: Boolean)
+  case class CounterConfig(max: Int, ttl: Duration, lockTimeout: Duration, clearOnSuccess: Boolean)
 
   val FailResult = "failure"
   val SuccResult = "success"
@@ -67,8 +70,8 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
       _                   ← findConfig(action, resultType, keyName)
     } yield makeKey(action, resultType, keyName, keyValue)
 
-    storage.get(hashedKeys) map { values ⇒
-      if (values.containsValue(Exceeded)) LimitExceeded else NotExceeded
+    storage.get(hashedKeys) map { valuesMap ⇒
+      if (valuesMap.values.exists(_ == Exceeded)) LimitExceeded else NotExceeded
     }
   }
 
@@ -76,19 +79,17 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
    * Increment counter for given action and keys
    * Reset failure counter on success result if it specified in config file (clear-on-success = true)
    */
-  def increment(success: Boolean, action: String, keys: Seq[(String, String)]) {
+  def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit = {
     filterExcludes(keys) foreach { case (keyName, keyValue) ⇒
       if (success && findConfig(action, FailResult, keyName).exists(_.clearOnSuccess)) {
           log.trace(s"Reset rate limit for: $action, $FailResult, $keyName, $keyValue")
           storage.delete(makeKey(action, FailResult, keyName, keyValue))
-
       } else {
         val resultType = if (success) SuccResult else FailResult
 
         findConfig(action, resultType, keyName) foreach { cntConfig ⇒
           val cntKey = makeKey(action, resultType, keyName, keyValue)
-
-          storage.incr(cntKey, cntConfig.ttlMillis) foreach { cnt ⇒
+          storage.increment(cntKey, cntConfig.ttl) foreach { cnt ⇒
             log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
 
             if (cnt >= cntConfig.max) {
@@ -98,7 +99,7 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
                 .labels(action)
                 .inc()
 
-              storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
+              storage.set(cntKey, cntConfig.lockTimeout, Exceeded)
             }
           }
         }
@@ -117,8 +118,8 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
         .map { cfg ⇒
           CounterConfig(
             max            = cfg.getInt("max"),
-            ttlMillis      = cfg.getDuration("per", TimeUnit.MILLISECONDS),
-            lockTimeoutMs  = cfg.getDuration("lock-timeout", TimeUnit.MILLISECONDS),
+            ttl            = cfg.getDuration("per"),
+            lockTimeout    = cfg.getDuration("lock-timeout"),
             clearOnSuccess = cfg.getBoolean("clear-on-success")
           )
         }
@@ -142,34 +143,49 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
     }
   }
 
+  implicit def asFiniteDuration(d: java.time.Duration): Duration =
+    scala.concurrent.duration.Duration.fromNanos(d.toNanos)
+
   private def makeKey(parts: Any*) =
     "ratelimit-" + Digest.md5(parts.map(_.toString.trim.toLowerCase).mkString("-"))
 }
 
+trait RateLimitStorage {
+  def get(keys: Seq[String]): Future[Map[String, AnyRef]]
+
+  def delete(key: String): Future[Unit]
+
+  def increment(key: String, expiration: Duration): Future[Long]
+
+  def set(key: String, expiration: Duration, value: Any): Future[Unit]
+}
 
 @Lazy
 @Component
-@Autowired
-class RateLimitStorage(memcache: MemcachedClient) extends MemcacheSupport {
+@ConditionalOnConfig(
+  name = Array("sbuslab.rate-limit.storage"),
+  havingValue = "memcached")
+class RateLimitMemcachedStorage(memcache: MemcachedClient)(implicit ec: ExecutionContext) extends MemcacheSupport with RateLimitStorage {
 
-  private val empty = Future.successful(new java.util.HashMap[String, AnyRef])
+  private val empty = Future.successful(new HashMap[String, AnyRef])
 
-  def get(keys: Seq[String]): Future[java.util.Map[String, AnyRef]] =
+  override def get(keys: Seq[String]): Future[Map[String, AnyRef]] =
     if (keys.nonEmpty) {
-      asFutureBulk(memcache.asyncGetBulk(keys.asJava))
+      asFutureBulk(memcache.asyncGetBulk(keys.asJava)).map(_.asScala.toMap)
     } else {
       empty
     }
 
-  def delete(key: String) {
-    memcache.delete(key)
+  override def delete(key: String): Future[Unit] = {
+    asFutureOperation(memcache.delete(key)).map(_ ⇒ Unit)
   }
 
-  def incr(key: String, ttlMillis: Long): Future[java.lang.Long] =
-    asFutureOperation(memcache.asyncIncr(key, 1, 1, ((System.currentTimeMillis + ttlMillis) / 1000).toInt))
+  override def increment(key: String, expiration: Duration): Future[Long] =
+    asFutureOperation(memcache.asyncIncr(key, 1, 1, ((System.currentTimeMillis + expiration.toMillis) / 1000).toInt))
+      .mapTo[Long]
 
-  def set(key: String, ttlMillis: Long, value: Any) {
-    memcache.set(key, ((System.currentTimeMillis + ttlMillis) / 1000).toInt, value)
+  override def set(key: String, expiration: Duration, value: Any): Future[Unit] = {
+    asFutureOperation(memcache.set(key, ((System.currentTimeMillis + expiration.toMillis) / 1000).toInt, value)).map(_ ⇒ Unit)
   }
 }
 

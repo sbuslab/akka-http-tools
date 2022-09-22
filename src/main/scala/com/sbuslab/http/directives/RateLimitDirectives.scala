@@ -6,8 +6,7 @@ import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.model.{HttpMethods, HttpResponse, RemoteAddress, StatusCodes}
 import akka.http.scaladsl.model.headers.{`Remote-Address`, `X-Forwarded-For`, `X-Real-Ip`}
 import akka.http.scaladsl.server.{Directive1, Directives, ExceptionHandler, Route}
-
-import com.sbuslab.http.{LimitExceeded, RateLimitProvider}
+import com.sbuslab.http.ratelimit.{LimitExceeded, RateLimitProvider}
 import com.sbuslab.model.TooManyRequestError
 import com.sbuslab.utils.Logging
 

@@ -1,36 +1,17 @@
-package com.sbuslab.http
+package com.sbuslab.http.ratelimit
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import com.typesafe.config.{Config, ConfigUtil}
 import io.prometheus.client.Counter
-import net.spy.memcached.MemcachedClient
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Lazy
-import org.springframework.stereotype.{Component, Service}
+import org.springframework.stereotype.Service
 
-import com.sbuslab.utils.{Digest, JsonFormatter, Logging, MemcacheSupport}
-
-
-sealed trait CheckLimitResult
-case object LimitExceeded extends CheckLimitResult
-case object NotExceeded extends CheckLimitResult
-
-
-trait RateLimitProvider {
-  def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult]
-  def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit
-}
-
-object RateLimitProvider {
-  val noop = new RateLimitProvider {
-    private val notExceeded = Future.successful(NotExceeded)
-    def increment(success: Boolean, action: String, keys: Seq[(String, String)]) = {}
-    def check(action: String, keys: Seq[(String, String)]) = notExceeded
-  }
-}
+import com.sbuslab.utils.{Digest, JsonFormatter, Logging}
 
 
 @Lazy
@@ -38,11 +19,11 @@ object RateLimitProvider {
 @Autowired
 class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: ExecutionContext) extends RateLimitProvider with Logging  {
 
-  case class CounterConfig(max: Int, ttlMillis: Long, lockTimeoutMs: Long, clearOnSuccess: Boolean)
+  case class CounterConfig(max: Int, ttl: Duration, lockTimeout: Duration, clearOnSuccess: Boolean)
 
-  val FailResult = "failure"
-  val SuccResult = "success"
-  val Exceeded   = "exceeded"
+  val FailResult    = "failure"
+  val SuccessResult = "success"
+  val Exceeded      = "exceeded"
 
   private val conf          = config.getConfig("sbuslab.rate-limit")
   private val counters      = conf.getConfig("counters")
@@ -63,12 +44,12 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
   def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult] = {
     val hashedKeys = for {
       (keyName, keyValue) ← filterExcludes(keys)
-      resultType          ← Seq(FailResult, SuccResult)
+      resultType          ← Seq(FailResult, SuccessResult)
       _                   ← findConfig(action, resultType, keyName)
     } yield makeKey(action, resultType, keyName, keyValue)
 
-    storage.get(hashedKeys) map { values ⇒
-      if (values.containsValue(Exceeded)) LimitExceeded else NotExceeded
+    storage.get(hashedKeys) map { valuesMap ⇒
+      if (valuesMap.exists(_._2 == Exceeded)) LimitExceeded else NotExceeded
     }
   }
 
@@ -76,19 +57,18 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
    * Increment counter for given action and keys
    * Reset failure counter on success result if it specified in config file (clear-on-success = true)
    */
-  def increment(success: Boolean, action: String, keys: Seq[(String, String)]) {
+  def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit = {
     filterExcludes(keys) foreach { case (keyName, keyValue) ⇒
       if (success && findConfig(action, FailResult, keyName).exists(_.clearOnSuccess)) {
           log.trace(s"Reset rate limit for: $action, $FailResult, $keyName, $keyValue")
           storage.delete(makeKey(action, FailResult, keyName, keyValue))
-
       } else {
-        val resultType = if (success) SuccResult else FailResult
+        val resultType = if (success) SuccessResult else FailResult
 
         findConfig(action, resultType, keyName) foreach { cntConfig ⇒
           val cntKey = makeKey(action, resultType, keyName, keyValue)
 
-          storage.incr(cntKey, cntConfig.ttlMillis) foreach { cnt ⇒
+          storage.increment(cntKey, cntConfig.ttl) foreach { cnt ⇒
             log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
 
             if (cnt >= cntConfig.max) {
@@ -98,7 +78,7 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
                 .labels(action)
                 .inc()
 
-              storage.set(cntKey, cntConfig.lockTimeoutMs, Exceeded)
+              storage.set(cntKey, cntConfig.lockTimeout, Exceeded)
             }
           }
         }
@@ -117,8 +97,8 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
         .map { cfg ⇒
           CounterConfig(
             max            = cfg.getInt("max"),
-            ttlMillis      = cfg.getDuration("per", TimeUnit.MILLISECONDS),
-            lockTimeoutMs  = cfg.getDuration("lock-timeout", TimeUnit.MILLISECONDS),
+            ttl            = cfg.getDuration("per"),
+            lockTimeout    = cfg.getDuration("lock-timeout"),
             clearOnSuccess = cfg.getBoolean("clear-on-success")
           )
         }
@@ -142,36 +122,45 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
     }
   }
 
+  implicit def asFiniteDuration(d: java.time.Duration): Duration =
+    scala.concurrent.duration.Duration.fromNanos(d.toNanos)
+
   private def makeKey(parts: Any*) =
     "ratelimit-" + Digest.md5(parts.map(_.toString.trim.toLowerCase).mkString("-"))
 }
 
 
-@Lazy
-@Component
-@Autowired
-class RateLimitStorage(memcache: MemcachedClient) extends MemcacheSupport {
+sealed trait CheckLimitResult
+case object LimitExceeded extends CheckLimitResult
+case object NotExceeded extends CheckLimitResult
 
-  private val empty = Future.successful(new java.util.HashMap[String, AnyRef])
 
-  def get(keys: Seq[String]): Future[java.util.Map[String, AnyRef]] =
-    if (keys.nonEmpty) {
-      asFutureBulk(memcache.asyncGetBulk(keys.asJava))
-    } else {
-      empty
-    }
+trait RateLimitProvider {
+  def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult]
+  def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit
+}
 
-  def delete(key: String) {
-    memcache.delete(key)
-  }
 
-  def incr(key: String, ttlMillis: Long): Future[java.lang.Long] =
-    asFutureOperation(memcache.asyncIncr(key, 1, 1, ((System.currentTimeMillis + ttlMillis) / 1000).toInt))
-
-  def set(key: String, ttlMillis: Long, value: Any) {
-    memcache.set(key, ((System.currentTimeMillis + ttlMillis) / 1000).toInt, value)
+object RateLimitProvider {
+  val noop = new RateLimitProvider {
+    private val notExceeded = Future.successful(NotExceeded)
+    def increment(success: Boolean, action: String, keys: Seq[(String, String)]) = {}
+    def check(action: String, keys: Seq[(String, String)]) = notExceeded
   }
 }
+
+
+trait RateLimitStorage {
+
+  def get(keys: Seq[String]): Future[Map[String, AnyRef]]
+
+  def delete(key: String): Future[Unit]
+
+  def increment(key: String, expiration: Duration): Future[Long]
+
+  def set(key: String, expiration: Duration, value: Any): Future[Unit]
+}
+
 
 object RateLimitMetrics {
 

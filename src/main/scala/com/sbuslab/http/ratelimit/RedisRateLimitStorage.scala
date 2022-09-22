@@ -1,8 +1,8 @@
 package com.sbuslab.http.ratelimit
 
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import io.lettuce.core.ScriptOutputType
 import io.lettuce.core.cluster.api.StatefulRedisClusterConnection
@@ -11,12 +11,14 @@ import org.springframework.stereotype.Component
 
 import com.sbuslab.utils.condition.ConditionalOnConfig
 
+
 @Lazy
 @Component
 @ConditionalOnConfig(
-  name = Array(RateLimitStorage.ConfigKey),
-  havingValue = RateLimitStorage.RedisStorage)
-class RateLimitRedisStorage(redisClient: StatefulRedisClusterConnection[String, String])(implicit ec: ExecutionContext) extends RateLimitStorage {
+  name = Array("sbuslab.rate-limit.storage"),
+  havingValue = "redis"
+)
+class RedisRateLimitStorage(redisClient: StatefulRedisClusterConnection[String, String])(implicit ec: ExecutionContext) extends RateLimitStorage {
 
   private val IncrementLuaScript =
     """
@@ -28,23 +30,24 @@ class RateLimitRedisStorage(redisClient: StatefulRedisClusterConnection[String, 
       |return current
       |""".stripMargin
 
-  override def get(keys: Seq[String]): Future[Map[String, AnyRef]] = {
-    val commands = redisClient.async
-
-    val keyValues: Seq[Future[(String, AnyRef)]] = keys.map(key ⇒ commands.get(key).toScala.map(key → _))
-    Future.sequence(keyValues)
+  override def get(keys: Seq[String]): Future[Map[String, AnyRef]] =
+    Future.sequence(keys.map(key ⇒ redisClient.async.get(key).toScala.map(key → _)))
       .map(seq ⇒ seq.filter(_._2 != null).toMap)
-  }
 
   override def delete(key: String): Future[Unit] =
     redisClient.async
       .del(key)
-      .toScala map (_ ⇒ {})
+      .toScala
+      .map(_ ⇒ {})
 
   override def increment(key: String, expiration: Duration): Future[Long] =
-    redisClient.async().eval(IncrementLuaScript, ScriptOutputType.INTEGER, Array(key), expiration.toSeconds.toString).toScala
+    redisClient.async
+      .eval(IncrementLuaScript, ScriptOutputType.INTEGER, Array(key), expiration.toSeconds.toString)
+      .toScala
 
   override def set(key: String, expiration: Duration, value: Any): Future[Unit] =
-    redisClient.async().setex(key, expiration.toSeconds, value.toString).toScala.map(_ ⇒ {})
-
+    redisClient.async()
+      .setex(key, expiration.toSeconds, value.toString)
+      .toScala
+      .map(_ ⇒ {})
 }

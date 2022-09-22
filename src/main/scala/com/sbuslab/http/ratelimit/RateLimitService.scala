@@ -1,9 +1,9 @@
-package com.sbuslab.http
+package com.sbuslab.http.ratelimit
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
-import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import com.typesafe.config.{Config, ConfigUtil}
 import io.prometheus.client.Counter
@@ -11,27 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 
-import com.sbuslab.http.ratelimit.RateLimitStorage
 import com.sbuslab.utils.{Digest, JsonFormatter, Logging}
-
-
-sealed trait CheckLimitResult
-case object LimitExceeded extends CheckLimitResult
-case object NotExceeded extends CheckLimitResult
-
-
-trait RateLimitProvider {
-  def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult]
-  def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit
-}
-
-object RateLimitProvider {
-  val noop = new RateLimitProvider {
-    private val notExceeded = Future.successful(NotExceeded)
-    def increment(success: Boolean, action: String, keys: Seq[(String, String)]) = {}
-    def check(action: String, keys: Seq[(String, String)]) = notExceeded
-  }
-}
 
 
 @Lazy
@@ -41,9 +21,9 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
 
   case class CounterConfig(max: Int, ttl: Duration, lockTimeout: Duration, clearOnSuccess: Boolean)
 
-  val FailResult = "failure"
-  val SuccResult = "success"
-  val Exceeded   = "exceeded"
+  val FailResult    = "failure"
+  val SuccessResult = "success"
+  val Exceeded      = "exceeded"
 
   private val conf          = config.getConfig("sbuslab.rate-limit")
   private val counters      = conf.getConfig("counters")
@@ -64,12 +44,12 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
   def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult] = {
     val hashedKeys = for {
       (keyName, keyValue) ← filterExcludes(keys)
-      resultType          ← Seq(FailResult, SuccResult)
+      resultType          ← Seq(FailResult, SuccessResult)
       _                   ← findConfig(action, resultType, keyName)
     } yield makeKey(action, resultType, keyName, keyValue)
 
     storage.get(hashedKeys) map { valuesMap ⇒
-      if (valuesMap.values.exists(_ == Exceeded)) LimitExceeded else NotExceeded
+      if (valuesMap.exists(_._2 == Exceeded)) LimitExceeded else NotExceeded
     }
   }
 
@@ -83,10 +63,11 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
           log.trace(s"Reset rate limit for: $action, $FailResult, $keyName, $keyValue")
           storage.delete(makeKey(action, FailResult, keyName, keyValue))
       } else {
-        val resultType = if (success) SuccResult else FailResult
+        val resultType = if (success) SuccessResult else FailResult
 
         findConfig(action, resultType, keyName) foreach { cntConfig ⇒
           val cntKey = makeKey(action, resultType, keyName, keyValue)
+
           storage.increment(cntKey, cntConfig.ttl) foreach { cnt ⇒
             log.trace(s"Incremented rate limit for: $action, $resultType, $keyName, $keyValue = $cnt")
 
@@ -148,6 +129,37 @@ class RateLimitService(config: Config, storage: RateLimitStorage)(implicit ec: E
     "ratelimit-" + Digest.md5(parts.map(_.toString.trim.toLowerCase).mkString("-"))
 }
 
+
+sealed trait CheckLimitResult
+case object LimitExceeded extends CheckLimitResult
+case object NotExceeded extends CheckLimitResult
+
+
+trait RateLimitProvider {
+  def check(action: String, keys: Seq[(String, String)]): Future[CheckLimitResult]
+  def increment(success: Boolean, action: String, keys: Seq[(String, String)]): Unit
+}
+
+
+object RateLimitProvider {
+  val noop = new RateLimitProvider {
+    private val notExceeded = Future.successful(NotExceeded)
+    def increment(success: Boolean, action: String, keys: Seq[(String, String)]) = {}
+    def check(action: String, keys: Seq[(String, String)]) = notExceeded
+  }
+}
+
+
+trait RateLimitStorage {
+
+  def get(keys: Seq[String]): Future[Map[String, AnyRef]]
+
+  def delete(key: String): Future[Unit]
+
+  def increment(key: String, expiration: Duration): Future[Long]
+
+  def set(key: String, expiration: Duration, value: Any): Future[Unit]
+}
 
 
 object RateLimitMetrics {

@@ -5,12 +5,13 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
-import com.sbuslab.http.ratelimit.RateLimitStorage
 import com.typesafe.config.{Config, ConfigUtil}
 import io.prometheus.client.Counter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
+
+import com.sbuslab.http.ratelimit.RateLimitStorage
 import com.sbuslab.utils.{Digest, JsonFormatter, Logging}
 
 

@@ -14,7 +14,7 @@ trait RateLimitStorage {
 }
 
 object RateLimitStorage {
-  val ConfigKey = "sbuslab.rate-limit.storage"
-  val MemcachedStorage = "memcached"
-  val RedisStorage = "redis"
+  final val ConfigKey = "sbuslab.rate-limit.storage"
+  final val MemcachedStorage = "memcached"
+  final val RedisStorage = "redis"
 }

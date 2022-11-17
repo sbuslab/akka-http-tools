@@ -1,13 +1,16 @@
 package com.sbuslab.http
 
 import java.io.StringWriter
+import java.io.InputStream
+import java.security.{ KeyStore, SecureRandom }
 import java.util.UUID
+import javax.net.ssl.{ KeyManagerFactory, SSLContext, TrustManagerFactory }
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{ ConnectionContext, Http, HttpsConnectionContext }
 import akka.http.scaladsl.marshalling.Marshaller
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
@@ -61,8 +64,11 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   def start(initRoutes: ⇒ Route) {
     try {
       DefaultExports.initialize()
-
-      Http().newServerAt(conf.getString("interface"), conf.getInt("port")).bindFlow(
+      var serverBuilder = Http().newServerAt(conf.getString("interface"), conf.getInt("port"))
+      if (conf.getBoolean("ssl.enabled")) {
+        serverBuilder = serverBuilder.enableHttps(createHttpsContext())
+      }
+      serverBuilder.bindFlow(
         startWithDirectives {
           pathEndOrSingleSlash {
             method(CustomMethods.PING) {
@@ -101,6 +107,27 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       Await.result(system.whenTerminated, 30.seconds)
       log.info("Terminated... Bye")
     }
+  }
+
+  private def createHttpsContext(): HttpsConnectionContext = {
+
+    val password: Array[Char] = conf.getString("ssl.keystore-pass").toCharArray // do not store passwords in code, read them from somewhere safe!
+
+    val ks: KeyStore = KeyStore.getInstance("PKCS12")
+    val keystore: InputStream = getClass.getClassLoader.getResourceAsStream(conf.getString("ssl.keystore-path"))
+
+    require(keystore != null, "Keystore required!")
+    ks.load(keystore, password)
+
+    val keyManagerFactory: KeyManagerFactory = KeyManagerFactory.getInstance("SunX509")
+    keyManagerFactory.init(ks, password)
+
+    val tmf: TrustManagerFactory = TrustManagerFactory.getInstance("SunX509")
+    tmf.init(ks)
+
+    val sslContext: SSLContext = SSLContext.getInstance("TLS")
+    sslContext.init(keyManagerFactory.getKeyManagers, tmf.getTrustManagers, new SecureRandom)
+    ConnectionContext.httpsServer(sslContext)
   }
 
   private def startWithDirectives(inner: Route): Route =

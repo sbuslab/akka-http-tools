@@ -54,18 +54,23 @@ trait RestRoutes extends AllCustomDirectives {
 class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionContext, mat: Materializer) extends AllCustomDirectives {
 
   implicit val timeout = Timeout(10.seconds)
+  
+  private val corsSettings = CorsSettings(system)
 
-  private val logBody               = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
+  private val logBody               = conf.hasPath("log-body") && conf.getBoolean("log-body")
+  private val ssoEnabled            = conf.hasPath("ssl.enabled") && conf.getBoolean("ssl.enabled")
   private val robotsTxt             = if (conf.hasPath("robots-txt")) conf.getString("robots-txt") else "User-agent: *\nDisallow: /"
   private val internalNetworkPrefix = if (conf.hasPath("internal-network-prefix")) conf.getString("internal-network-prefix") else "unknown"
-  private val corsSettings          = CorsSettings(system)
+  private val globalPathPrefix      = if (conf.hasPath("path-prefix")) pathPrefix(conf.getString("path-prefix")) else pass
 
 
   def start(initRoutes: ⇒ Route) {
     try {
       DefaultExports.initialize()
+      
       val serverBuilder = Http().newServerAt(conf.getString("interface"), conf.getInt("port"))
-      val serverBuilderWithProtocol = if (conf.hasPath("ssl.enabled") && conf.getBoolean("ssl.enabled")) serverBuilder.enableHttps(createHttpsContext()) else serverBuilder
+      val serverBuilderWithProtocol = if (ssoEnabled) serverBuilder.enableHttps(createHttpsContext()) else serverBuilder
+      
       serverBuilderWithProtocol.bindFlow(
         startWithDirectives {
           pathEndOrSingleSlash {
@@ -85,17 +90,16 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           initRoutes
         }
       ) onComplete { outcome ⇒
-        val protocol = if (conf.getBoolean("ssl.enabled")) "https:" else "http:"
-        val interface = conf.getString("interface")
-        val port = conf.getInt("port")
+        val listening = s"${if (ssoEnabled) "https" else "http"}:${conf.getString("interface")}:${conf.getInt("port")}"
+      
         outcome match {
-        case Success(_) ⇒
-          log.info(s"Server is listening on $protocol$interface:$port")
+          case Success(_) ⇒
+            log.info(s"Server is listening on $listening")
 
-        case Failure(e) ⇒
-          log.error(s"Error on bind server to $protocol$interface:$port", e)
-          sys.exit(1)
-      }
+          case Failure(e) ⇒
+            log.error(s"Error on bind server to $listening", e)
+            sys.exit(1)
+        }
       }
     } catch {
       case e: Throwable ⇒
@@ -178,28 +182,21 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
                     }
                   }
                 } ~
-                  path("robots.txt") {
-                    get {
-                      completeWith(Marshaller.StringMarshaller) { complete ⇒
-                        complete(robotsTxt)
-                      }
+                path("robots.txt") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      complete(robotsTxt)
                     }
-                  } ~
-                  globalPathPrefix {
-                    inner
                   }
+                } ~
+                globalPathPrefix {
+                  inner
+                }
               }
             }
           }
         }
       }
-    }
-
-  private val globalPathPrefix =
-    if (conf.hasPath("path-prefix")) {
-      pathPrefix(conf.getString("path-prefix"))
-    } else {
-      pass
     }
 
   private def stringifySource(data: HttpEntity): String =

@@ -64,11 +64,9 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   def start(initRoutes: ⇒ Route) {
     try {
       DefaultExports.initialize()
-      var serverBuilder = Http().newServerAt(conf.getString("interface"), conf.getInt("port"))
-      if (conf.getBoolean("ssl.enabled")) {
-        serverBuilder = serverBuilder.enableHttps(createHttpsContext())
-      }
-      serverBuilder.bindFlow(
+      val serverBuilder = Http().newServerAt(conf.getString("interface"), conf.getInt("port"))
+      val serverBuilderWithProtocol = if (conf.hasPath("ssl.enabled") && conf.getBoolean("ssl.enabled")) serverBuilder.enableHttps(createHttpsContext()) else serverBuilder
+      serverBuilderWithProtocol.bindFlow(
         startWithDirectives {
           pathEndOrSingleSlash {
             method(CustomMethods.PING) {
@@ -86,13 +84,18 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           } ~
           initRoutes
         }
-      ) onComplete {
+      ) onComplete { outcome ⇒
+        val protocol = if (conf.getBoolean("ssl.enabled")) "https:" else "http:"
+        val interface = conf.getString("interface")
+        val port = conf.getInt("port")
+        outcome match {
         case Success(_) ⇒
-          log.info(s"Server is listening on ${conf.getString("interface")}:${conf.getInt("port")}")
+          log.info(s"Server is listening on $protocol$interface:$port")
 
         case Failure(e) ⇒
-          log.error(s"Error on bind server to ${conf.getString("interface")}:${conf.getInt("port")}", e)
+          log.error(s"Error on bind server to $protocol$interface:$port", e)
           sys.exit(1)
+      }
       }
     } catch {
       case e: Throwable ⇒
@@ -110,22 +113,21 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   }
 
   private def createHttpsContext(): HttpsConnectionContext = {
+    val password = conf.getString("ssl.keystore-pass").toCharArray
 
-    val password: Array[Char] = conf.getString("ssl.keystore-pass").toCharArray // do not store passwords in code, read them from somewhere safe!
-
-    val ks: KeyStore = KeyStore.getInstance("PKCS12")
-    val keystore: InputStream = getClass.getClassLoader.getResourceAsStream(conf.getString("ssl.keystore-path"))
+    val ks = KeyStore.getInstance("PKCS12")
+    val keystore = getClass.getClassLoader.getResourceAsStream(conf.getString("ssl.keystore-path"))
 
     require(keystore != null, "Keystore required!")
     ks.load(keystore, password)
 
-    val keyManagerFactory: KeyManagerFactory = KeyManagerFactory.getInstance("SunX509")
+    val keyManagerFactory = KeyManagerFactory.getInstance("SunX509")
     keyManagerFactory.init(ks, password)
 
-    val tmf: TrustManagerFactory = TrustManagerFactory.getInstance("SunX509")
+    val tmf = TrustManagerFactory.getInstance("SunX509")
     tmf.init(ks)
 
-    val sslContext: SSLContext = SSLContext.getInstance("TLS")
+    val sslContext = SSLContext.getInstance("TLS")
     sslContext.init(keyManagerFactory.getKeyManagers, tmf.getTrustManagers, new SecureRandom)
     ConnectionContext.httpsServer(sslContext)
   }

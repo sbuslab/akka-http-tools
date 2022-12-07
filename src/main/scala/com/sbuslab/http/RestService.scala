@@ -1,13 +1,16 @@
 package com.sbuslab.http
 
 import java.io.StringWriter
+import java.io.InputStream
+import java.security.{KeyStore, SecureRandom}
 import java.util.UUID
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{ConnectionContext, Http, HttpsConnectionContext}
 import akka.http.scaladsl.marshalling.Marshaller
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader
@@ -51,18 +54,24 @@ trait RestRoutes extends AllCustomDirectives {
 class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionContext, mat: Materializer) extends AllCustomDirectives {
 
   implicit val timeout = Timeout(10.seconds)
+  
+  private val corsSettings = CorsSettings(system)
 
-  private val logBody               = if (conf.hasPath("log-body")) conf.getBoolean("log-body") else false
+  private val logBody               = conf.hasPath("log-body") && conf.getBoolean("log-body")
+  private val ssoEnabled            = conf.hasPath("ssl.enabled") && conf.getBoolean("ssl.enabled")
   private val robotsTxt             = if (conf.hasPath("robots-txt")) conf.getString("robots-txt") else "User-agent: *\nDisallow: /"
   private val internalNetworkPrefix = if (conf.hasPath("internal-network-prefix")) conf.getString("internal-network-prefix") else "unknown"
-  private val corsSettings          = CorsSettings(system)
+  private val globalPathPrefix      = if (conf.hasPath("path-prefix")) pathPrefix(conf.getString("path-prefix")) else pass
 
 
   def start(initRoutes: ⇒ Route) {
     try {
       DefaultExports.initialize()
-
-      Http().newServerAt(conf.getString("interface"), conf.getInt("port")).bindFlow(
+      
+      val serverBuilder = Http().newServerAt(conf.getString("interface"), conf.getInt("port"))
+      val serverBuilderWithProtocol = if (ssoEnabled) serverBuilder.enableHttps(createHttpsContext()) else serverBuilder
+      
+      serverBuilderWithProtocol.bindFlow(
         startWithDirectives {
           pathEndOrSingleSlash {
             method(CustomMethods.PING) {
@@ -80,13 +89,17 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
           } ~
           initRoutes
         }
-      ) onComplete {
-        case Success(_) ⇒
-          log.info(s"Server is listening on ${conf.getString("interface")}:${conf.getInt("port")}")
+      ) onComplete { outcome ⇒
+        val listening = s"${if (ssoEnabled) "https" else "http"}:${conf.getString("interface")}:${conf.getInt("port")}"
+      
+        outcome match {
+          case Success(_) ⇒
+            log.info(s"Server is listening on $listening")
 
-        case Failure(e) ⇒
-          log.error(s"Error on bind server to ${conf.getString("interface")}:${conf.getInt("port")}", e)
-          sys.exit(1)
+          case Failure(e) ⇒
+            log.error(s"Error on bind server to $listening", e)
+            sys.exit(1)
+        }
       }
     } catch {
       case e: Throwable ⇒
@@ -101,6 +114,26 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
       Await.result(system.whenTerminated, 30.seconds)
       log.info("Terminated... Bye")
     }
+  }
+
+  private def createHttpsContext(): HttpsConnectionContext = {
+    val password = conf.getString("ssl.keystore-pass").toCharArray
+
+    val ks = KeyStore.getInstance("PKCS12")
+    val keystore = getClass.getClassLoader.getResourceAsStream(conf.getString("ssl.keystore-path"))
+
+    require(keystore != null, "Keystore required!")
+    ks.load(keystore, password)
+
+    val keyManagerFactory = KeyManagerFactory.getInstance("SunX509")
+    keyManagerFactory.init(ks, password)
+
+    val tmf = TrustManagerFactory.getInstance("SunX509")
+    tmf.init(ks)
+
+    val sslContext = SSLContext.getInstance("TLS")
+    sslContext.init(keyManagerFactory.getKeyManagers, tmf.getTrustManagers, new SecureRandom)
+    ConnectionContext.httpsServer(sslContext)
   }
 
   private def startWithDirectives(inner: Route): Route =
@@ -149,28 +182,21 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
                     }
                   }
                 } ~
-                  path("robots.txt") {
-                    get {
-                      completeWith(Marshaller.StringMarshaller) { complete ⇒
-                        complete(robotsTxt)
-                      }
+                path("robots.txt") {
+                  get {
+                    completeWith(Marshaller.StringMarshaller) { complete ⇒
+                      complete(robotsTxt)
                     }
-                  } ~
-                  globalPathPrefix {
-                    inner
                   }
+                } ~
+                globalPathPrefix {
+                  inner
+                }
               }
             }
           }
         }
       }
-    }
-
-  private val globalPathPrefix =
-    if (conf.hasPath("path-prefix")) {
-      pathPrefix(conf.getString("path-prefix"))
-    } else {
-      pass
     }
 
   private def stringifySource(data: HttpEntity): String =

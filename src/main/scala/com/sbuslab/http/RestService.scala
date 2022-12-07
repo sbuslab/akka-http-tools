@@ -2,15 +2,15 @@ package com.sbuslab.http
 
 import java.io.StringWriter
 import java.io.InputStream
-import java.security.{ KeyStore, SecureRandom }
+import java.security.{KeyStore, SecureRandom}
 import java.util.UUID
-import javax.net.ssl.{ KeyManagerFactory, SSLContext, TrustManagerFactory }
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.{ ConnectionContext, Http, HttpsConnectionContext }
+import akka.http.scaladsl.{ConnectionContext, Http, HttpsConnectionContext}
 import akka.http.scaladsl.marshalling.Marshaller
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.RawHeader

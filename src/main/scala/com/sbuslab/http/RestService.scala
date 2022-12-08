@@ -1,7 +1,7 @@
 package com.sbuslab.http
 
 import java.io.StringWriter
-import java.io.InputStream
+import java.io.FileInputStream
 import java.security.{KeyStore, SecureRandom}
 import java.util.UUID
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
@@ -120,7 +120,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     val password = conf.getString("ssl.keystore-pass").toCharArray
 
     val ks = KeyStore.getInstance("PKCS12")
-    val keystore = getClass.getClassLoader.getResourceAsStream(conf.getString("ssl.keystore-path"))
+    val keystore = new FileInputStream(conf.getString("ssl.keystore-path"))
 
     require(keystore != null, "Keystore required!")
     ks.load(keystore, password)

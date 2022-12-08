@@ -1,7 +1,7 @@
 package com.sbuslab.http
 
 import java.io.StringWriter
-import java.io.InputStream
+import java.io.FileInputStream
 import java.security.{KeyStore, SecureRandom}
 import java.util.UUID
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
@@ -54,7 +54,7 @@ trait RestRoutes extends AllCustomDirectives {
 class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionContext, mat: Materializer) extends AllCustomDirectives {
 
   implicit val timeout = Timeout(10.seconds)
-  
+
   private val corsSettings = CorsSettings(system)
 
   private val logBody               = conf.hasPath("log-body") && conf.getBoolean("log-body")
@@ -67,10 +67,10 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
   def start(initRoutes: ⇒ Route) {
     try {
       DefaultExports.initialize()
-      
+
       val serverBuilder = Http().newServerAt(conf.getString("interface"), conf.getInt("port"))
       val serverBuilderWithProtocol = if (ssoEnabled) serverBuilder.enableHttps(createHttpsContext()) else serverBuilder
-      
+
       serverBuilderWithProtocol.bindFlow(
         startWithDirectives {
           pathEndOrSingleSlash {
@@ -91,7 +91,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
         }
       ) onComplete { outcome ⇒
         val listening = s"${if (ssoEnabled) "https" else "http"}:${conf.getString("interface")}:${conf.getInt("port")}"
-      
+
         outcome match {
           case Success(_) ⇒
             log.info(s"Server is listening on $listening")
@@ -120,7 +120,7 @@ class RestService(conf: Config)(implicit system: ActorSystem, ec: ExecutionConte
     val password = conf.getString("ssl.keystore-pass").toCharArray
 
     val ks = KeyStore.getInstance("PKCS12")
-    val keystore = getClass.getClassLoader.getResourceAsStream(conf.getString("ssl.keystore-path"))
+    val keystore = new FileInputStream(conf.getString("ssl.keystore-path"))
 
     require(keystore != null, "Keystore required!")
     ks.load(keystore, password)
